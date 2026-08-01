@@ -3317,6 +3317,5 @@ walk_filesystem() {
 
 if [ "$DOCKER_LAUNCH" = "on" ]; then
     docker_workspace
-else
-    walk_filesystem
 fi
+walk_filesystem
