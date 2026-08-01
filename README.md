@@ -100,6 +100,7 @@ Inside Walker, the bottom of each view shows the available keys. The most common
 | `.` | In picker mode, returns the current folder to the calling app. |
 | `u` / `d` | Go up one folder / return to the previous folder. |
 | `o` | Change folder display order. |
+| `g` | Manage the current folder: copy, move, rename, create-folder, and Trash actions. |
 | `s` | Choose a scope, refresh if needed, and search; refine results by size. |
 | `x` | Open Help & utilities: Docker, mounts, scan refresh, cleanup, preferences, help, and shell. |
 | `!` | Open a normal shell in the current folder; type `exit` to return. |
