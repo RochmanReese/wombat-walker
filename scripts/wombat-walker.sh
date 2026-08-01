@@ -2416,11 +2416,11 @@ walk_filesystem() {
                 echo "  [1] Alphabetical  [2] Largest first  [3] Smallest first  [4] Most recently updated first"
                 read -r -e -p "> " sort_choice
                 case "$sort_choice" in
-                    1) SORT_ORDER="alphabetical" ;;
-                    2) [ "$SHOW_FILE_SIZES" = "on" ] && SORT_ORDER="largest" || echo "❌ Restart with --filesize on." ;;
-                    3) [ "$SHOW_FILE_SIZES" = "on" ] && SORT_ORDER="smallest" || echo "❌ Restart with --filesize on." ;;
-                    4) SORT_ORDER="updated" ;;
-                    *) echo "❌ Enter 1, 2, 3, or 4." ;;
+                    1) save_default_file_order alphabetical && notice="Display order saved: alphabetical" ;;
+                    2) [ "$SHOW_FILE_SIZES" = "on" ] && save_default_file_order largest && notice="Display order saved: largest first" || notice="❌ Largest-first order requires file-size calculations to be on." ;;
+                    3) [ "$SHOW_FILE_SIZES" = "on" ] && save_default_file_order smallest && notice="Display order saved: smallest first" || notice="❌ Smallest-first order requires file-size calculations to be on." ;;
+                    4) save_default_file_order updated && notice="Display order saved: most recently updated first" ;;
+                    *) notice="❌ Enter 1, 2, 3, or 4." ;;
                 esac
                 page=0
                 ;;
