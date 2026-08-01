@@ -2217,12 +2217,12 @@ walk_filesystem() {
         echo
         if [ "$PICK_FOLDER" = "on" ]; then
             dot_action="[.] Use this folder and return"
+            first_action="$dot_action"
         else
-            dot_action="[!] Open shell in this folder"
+            first_action="[!] Open shell in this folder"
         fi
-        printf "  %-31s%-28s%-21s%s\n" "$dot_action" "[u] Up one folder" "[d] Previous folder" "[x] Management Utilities"
-        printf "  %-31s%-28s%-21s%s\n" "[o] Change display order" "[s] Search folders & files" "[g] Manage current folder" "[q] Quit"
-        printf "  %-31s\n" "[?] Help"
+        printf "  %-31s%-12s%-25s%-25s%s\n" "$first_action" "[u] Up" "[d] Down one folder" "[x] Management Utilities" "[?] Help"
+        printf "  %-31s%-31s%-31s%s\n" "[o] Change display order" "[s] Search folders & files" "[g] Manage current folder" "[q] Quit"
         echo
         if [ -n "$notice" ]; then
             echo "  $notice"
