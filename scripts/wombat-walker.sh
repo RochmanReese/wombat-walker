@@ -2497,8 +2497,8 @@ walk_filesystem() {
                             break
                         fi
                     fi
-                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [q] Return"
-                    read -r -e -p "Open result number, or choose n/p/o/f/q: " search_result_number
+                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [r] New search words    [q] Return"
+                    read -r -e -p "Open result number, or choose n/p/o/f/r/q: " search_result_number
                     case "$search_result_number" in
                         q|Q|"") break ;;
                         n|N) search_offset=$((search_offset + SEARCH_LIMIT)); continue ;;
@@ -2523,9 +2523,19 @@ walk_filesystem() {
                             search_offset=0
                             continue
                             ;;
+                        r|R)
+                            read -r -e -p "Enter new search words (q to cancel): " search_words
+                            case "$search_words" in
+                                q|Q|"") break ;;
+                            esac
+                            search_min_size=""
+                            search_max_size=""
+                            search_offset=0
+                            continue
+                            ;;
                     esac
                     if ! [[ "$search_result_number" =~ ^[0-9]+$ ]] || [ "$search_result_number" -le "$search_offset" ] || [ "$search_result_number" -gt $((search_offset + SEARCH_LIMIT)) ]; then
-                        echo "❌ Enter a result number shown on this page, n, p, o, or q."
+                        echo "❌ Enter a result number shown on this page, n, p, o, f, r, or q."
                         continue
                     fi
                     if [ "$search_combined" = "on" ]; then
