@@ -1258,7 +1258,9 @@ docker_scan_all_running() {
         IFS=$'\t' read -r docker_id docker_name <<< "$docker_line"
         position=$((position + 1))
         echo
-        echo "================ Container $position of $running_containers: $docker_name ================"
+        printf '%*s\n' 98 '' | tr ' ' '='
+        echo "Docker scan — container $position of $running_containers: $docker_name"
+        printf '%*s\n' 98 '' | tr ' ' '='
         if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-scan "$WALKER_DATABASE" "$docker_id" /; then
             failures=$((failures + 1))
             echo "❌ Scan failed for: $docker_name — continuing with the remaining containers."
