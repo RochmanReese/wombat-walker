@@ -2313,6 +2313,7 @@ walk_filesystem() {
                 printf "  %-58s%s\n" "Management Utilities" "Display Utilities"
                 printf "  %-58s%s\n" "====================" "================="
                 printf "  %-58s%s\n" "[r] Reload this folder's live listing" "[i] Items per page (currently: $page_size)"
+                printf "  %-58s%s\n" "$display_size_option" "$display_hidden_option"
                 printf "  %-58s%s\n" "[e] Encryption label (enc)" "[d] Set saved default display order"
                 printf "  %-58s%s\n" "[v] Update saved scan below this folder (may be slow)" "[?] Show Walker help and command-line flags"
                 printf "  %-58s%s\n" "[m] Show mounted data filesystems" "[q] Return to Walker"
