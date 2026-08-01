@@ -1593,6 +1593,7 @@ docker_container_management_menu() {
         management_footer_left="  [number] select to manage a container"
         management_footer_right="[q] Return to Docker list"
         echo "  [a] Start all stopped containers    [z] Stop all running containers (locks them)"
+        echo
         printf "%-*s%s\n" $((119 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
