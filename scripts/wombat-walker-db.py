@@ -755,8 +755,12 @@ def cmd_disk_health(path, device_path, use_sudo=False):
     except FileNotFoundError:
         fail("nvme-cli is not installed; install the nvme-cli package to check NVMe health")
     except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-        fail(f"could not read NVMe health for {device_path}: {detail or exc}")
+        if isinstance(exc, subprocess.CalledProcessError):
+            detail = "\n".join(part for part in (exc.stderr.strip(), exc.stdout.strip()) if part)
+        else:
+            detail = str(exc)
+        command_text = " ".join(command)
+        fail(f"could not read NVMe health for {device_path}. Walker ran: {command_text}\n{detail or exc}")
 
     record = next((item for item in nvme_drive_records() if item["device_path"] == device_path), None)
     if not record:

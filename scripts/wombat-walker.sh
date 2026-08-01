@@ -2530,7 +2530,7 @@ disk_health_checker() {
             echo "$disk_output"
         else
             echo "$disk_output"
-            if [[ "$disk_output" =~ [Pp]ermission|[Aa]ccess[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted ]]; then
+            if [[ "$disk_output" != *"nvme-cli is not installed"* ]]; then
                 read -r -e -p "Try the same read-only check with sudo? [y/N] " sudo_choice
                 case "$sudo_choice" in
                     y|Y|yes|YES)
