@@ -4,6 +4,32 @@ New entries go at the top. Each entry records the working state, verification, n
 
 ---
 
+## Session: 01 August 2026 — Closed: mount clarity and v2 disk-health planning
+
+### What we did
+
+- Fixed `wombat-walker --docker`: `[q]` now returns to the main host explorer, matching Utilities → Docker, instead of exiting to the shell.
+- Reworked Mounted Storage into readable 114-character blocks showing device, filesystem, UUID, label, total/used/free space, usage percentage, full mount path, backing device classification, and connection type.
+- Added detection for a partition that occupies virtually an entire physical disk, reported as `Whole drive`; connection detection distinguishes USB, internal NVMe, and internal SATA where the system reports it.
+- Wrote `briefs/WOMBAT-WALKER-DISK-HEALTH-BRIEF.md` for a future v2 read-only disk-health utility covering NVMe, SSD, HDD, USB enclosures, and USB flash drives.
+
+### Verification
+
+- Ran `bash -n scripts/wombat-walker.sh`, `python3 -m py_compile scripts/wombat-walker-db.py`, and `git diff --check` for relevant changes.
+- Rendered the live mount-list output against the development system after each mount-display change.
+
+### Where we left off
+
+- v1 remains the working day-to-day application; `v1.0-working` remains the original dogfooded baseline at `e7a32c6`.
+- The disk-health feature is deliberately deferred to v2. Start with the new disk-health brief after the v2 shared-input/module work is established.
+
+### Watch out for
+
+- A source ending in `p1`, `p2`, etc. is technically a partition even when it occupies the whole physical drive; Walker presents the more useful `Whole drive` label only when it covers at least 99% of its parent disk.
+- USB enclosures and pen drives frequently do not expose SMART/NVMe diagnostics. Treat unavailable health telemetry as unsupported, not as a failed drive.
+
+---
+
 ## Session: 01 August 2026 — Closed: v1 dogfooding complete
 
 ### What we did

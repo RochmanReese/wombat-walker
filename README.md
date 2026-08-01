@@ -16,7 +16,8 @@ another application.
 ## ✨ Why Wombat Walker?
 
 - 📁 **Readable filesystem browsing** — files, folders, sizes, allocated disk space, dates, paging,
-  hidden-file control, search, and remembered display preferences.
+  hidden-file control, search, remembered display preferences, and a readable mounted-storage view
+  with live capacity, usage, full paths, backing-device type, and connection information.
 - 🔎 **Truthful folder search** — search filenames and paths in the current folder after Walker refreshes
   its metadata, or search the wider saved filesystem and Docker inventories.
 - 🧹 **Careful cleanup** — preview files and recoverable Wombat Trash actions before deleting host
