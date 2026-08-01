@@ -1323,7 +1323,7 @@ docker_purge_container_resources() {
 }
 
 docker_container_management_menu() {
-    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation management_footer_left management_footer_right
+    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation management_footer_left management_footer_right docker_notice
     local -a docker_lines
     while true; do
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
@@ -1372,6 +1372,11 @@ docker_container_management_menu() {
             echo "Container:  $docker_name"
             printf "Id: %-12s    Status: %-23s  Image: %-34s Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
             printf '%*s\n' 114 '' | tr ' ' '='
+            if [ -n "$docker_notice" ]; then
+                echo "  $docker_notice"
+                echo
+                docker_notice=""
+            fi
             echo
             echo "  [1] Start container"
             echo "  [2] Stop container"
@@ -1392,23 +1397,23 @@ docker_container_management_menu() {
             case "$confirmation" in
                 b|B|q|Q|"") break ;;
                 1)
-                    if docker start "$docker_id" >/dev/null 2>&1; then docker_status="Up"; echo "Container started: $docker_name"; else echo "❌ Could not start $docker_name."; fi
+                    if docker start "$docker_id" >/dev/null 2>&1; then docker_status="Up"; docker_notice="✅ Container started: $docker_name"; else docker_notice="❌ Could not start $docker_name."; fi
                     ;;
                 2)
-                    if docker stop "$docker_id" >/dev/null 2>&1; then docker_status="Exited"; docker_set_lock_state "$docker_id" locked || true; echo "Container stopped and locked: $docker_name"; else echo "❌ Could not stop $docker_name."; fi
+                    if docker stop "$docker_id" >/dev/null 2>&1; then docker_status="Exited"; docker_set_lock_state "$docker_id" locked || true; docker_notice="✅ Container stopped and locked: $docker_name"; else docker_notice="❌ Could not stop $docker_name."; fi
                     ;;
                 3)
                     docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
                     if [ "$docker_state" = "locked" ]; then
-                        echo "❌ Container is locked. Unlock it before removal."
+                        docker_notice="❌ Container is locked. Unlock it before removal."
                     else
                         echo "This removes the container only. Its images and named volumes remain."
                         read -r -e -p "Type the container name to confirm removal ($docker_name): " confirmation
                         if [ "$confirmation" = "$docker_name" ] && docker rm "$docker_id" >/dev/null 2>&1; then
-                            echo "Container removed: $docker_name"
+                            docker_notice="✅ Container removed: $docker_name"
                             break
                         else
-                            echo "❌ Removal cancelled or failed."
+                            docker_notice="❌ Removal cancelled or failed."
                         fi
                     fi
                     ;;
@@ -1416,9 +1421,9 @@ docker_container_management_menu() {
                     docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
                     if [ "$docker_state" = "locked" ]; then
                         read -r -e -p "Type the container name to unlock ($docker_name): " confirmation
-                        [ "$confirmation" = "$docker_name" ] && docker_set_lock_state "$docker_id" unlocked && echo "Container unlocked: $docker_name" || echo "❌ Unlock cancelled."
+                        if [ "$confirmation" = "$docker_name" ] && docker_set_lock_state "$docker_id" unlocked; then docker_notice="✅ Container unlocked: $docker_name"; else docker_notice="❌ Unlock cancelled."; fi
                     else
-                        docker_set_lock_state "$docker_id" locked && echo "Container locked: $docker_name"
+                        if docker_set_lock_state "$docker_id" locked; then docker_notice="✅ Container locked: $docker_name"; else docker_notice="❌ Could not lock container: $docker_name"; fi
                     fi
                     ;;
                 5) docker_show_mounts "$docker_id" ;;
