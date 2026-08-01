@@ -1381,6 +1381,7 @@ docker_purge_unlocked_stopped() {
         fi
     done
     if [ "${#purge_ids[@]}" -eq 0 ]; then
+        echo
         echo "No unlocked stopped containers are available for removal. Locked containers skipped: $locked."
         return 0
     fi
@@ -1396,47 +1397,89 @@ docker_purge_unlocked_stopped() {
 }
 
 docker_purge_container_resources() {
-    local docker_id="$1" docker_name="$2" docker_image docker_mount docker_type docker_volume docker_destination confirmation
-    local -a docker_mounts docker_volumes
+    local docker_id="$1" docker_name="$2" docker_image docker_mount docker_type docker_volume docker_destination confirmation docker_writable_bytes docker_image_bytes docker_volume_mountpoint docker_volume_bytes index removed_estimate=0
+    local -a docker_mounts docker_volumes docker_volume_sizes docker_bind_destinations purge_receipt
     docker_image="$(docker inspect --format '{{.Config.Image}}' "$docker_id" 2>/dev/null || true)"
     mapfile -t docker_mounts < <(docker inspect --format '{{range .Mounts}}{{.Type}}\t{{.Name}}\t{{.Destination}}{{"\n"}}{{end}}' "$docker_id" 2>/dev/null)
-    docker_volumes=()
+    docker_volumes=(); docker_volume_sizes=(); docker_bind_destinations=(); purge_receipt=()
+    echo
     echo "⚠️  PURGE IS PERMANENT — GONE IS GONE"
     echo "This permanently removes the selected container and its unused Docker-managed resources."
     echo "This cannot be undone. Approach with caution."
+    printf '%*s\n' 114 '' | tr ' ' '='
     echo "  Container: $docker_name"
     echo "  Image: ${docker_image:-unknown} (only if no other container uses it)"
     for docker_mount in "${docker_mounts[@]}"; do
         IFS=$'\t' read -r docker_type docker_volume docker_destination <<< "$docker_mount"
         if [ "$docker_type" = "volume" ] && [ -n "$docker_volume" ]; then
             docker_volumes+=("$docker_volume")
+            docker_volume_mountpoint="$(docker volume inspect --format '{{.Mountpoint}}' "$docker_volume" 2>/dev/null || true)"
+            docker_volume_bytes=""
+            if [ -n "$docker_volume_mountpoint" ] && [ -r "$docker_volume_mountpoint" ]; then
+                docker_volume_bytes="$(du -sk -- "$docker_volume_mountpoint" 2>/dev/null | awk 'NR==1 {printf "%.0f", $1 * 1024}')"
+            fi
+            docker_volume_sizes+=("$docker_volume_bytes")
             echo "  Named volume: $docker_volume"
         elif [ "$docker_type" = "bind" ]; then
+            docker_bind_destinations+=("$docker_destination")
             echo "  Preserved bind mount: $docker_destination"
         fi
     done
+    printf '%*s\n' 114 '' | tr ' ' '='
     echo "⚠️  Bind-mounted host folders will not be deleted by Walker, but purging this container"
     echo "    may affect the application’s access to those folders or leave their data orphaned."
+    echo
     read -r -e -p "Type PURGE $docker_name to permanently continue: " confirmation
     [ "$confirmation" = "PURGE $docker_name" ] || { echo "Purge cancelled."; return 0; }
-    docker stop "$docker_id" >/dev/null 2>&1 || true
+    docker_writable_bytes="$(docker inspect --size --format '{{.SizeRw}}' "$docker_id" 2>/dev/null || true)"
+    [[ "$docker_writable_bytes" =~ ^[0-9]+$ ]] || docker_writable_bytes=0
+    docker_image_bytes="$(docker image inspect --format '{{.Size}}' "$docker_image" 2>/dev/null || true)"
+    [[ "$docker_image_bytes" =~ ^[0-9]+$ ]] || docker_image_bytes=0
     if ! docker rm "$docker_id" >/dev/null 2>&1; then
         echo "❌ Could not remove container: $docker_name"
         return 1
     fi
-    for docker_volume in "${docker_volumes[@]}"; do
+    purge_receipt+=("  Removed container: $docker_name (writable layer: $(human_bytes "$docker_writable_bytes"))")
+    removed_estimate=$((removed_estimate + docker_writable_bytes))
+    for index in "${!docker_volumes[@]}"; do
+        docker_volume="${docker_volumes[$index]}"
+        docker_volume_bytes="${docker_volume_sizes[$index]}"
         if [ -z "$(docker ps -aq --filter "volume=$docker_volume" 2>/dev/null)" ]; then
-            docker volume rm "$docker_volume" >/dev/null 2>&1 || echo "⚠️ Could not remove volume: $docker_volume"
+            if docker volume rm "$docker_volume" >/dev/null 2>&1; then
+                if [[ "$docker_volume_bytes" =~ ^[0-9]+$ ]]; then
+                    purge_receipt+=("  Removed named volume: $docker_volume ($(human_bytes "$docker_volume_bytes"))")
+                    removed_estimate=$((removed_estimate + docker_volume_bytes))
+                else
+                    purge_receipt+=("  Removed named volume: $docker_volume (size unavailable)")
+                fi
+            else
+                purge_receipt+=("  ⚠️ Could not remove named volume: $docker_volume")
+            fi
         else
-            echo "Preserved shared volume: $docker_volume"
+            purge_receipt+=("  Preserved shared named volume: $docker_volume")
         fi
     done
     if [ -n "$docker_image" ] && [ -z "$(docker ps -aq --filter "ancestor=$docker_image" 2>/dev/null)" ]; then
-        docker image rm "$docker_image" >/dev/null 2>&1 || echo "⚠️ Could not remove image: $docker_image"
+        if docker image rm "$docker_image" >/dev/null 2>&1; then
+            purge_receipt+=("  Removed image: $docker_image ($(human_bytes "$docker_image_bytes"))")
+            removed_estimate=$((removed_estimate + docker_image_bytes))
+        else
+            purge_receipt+=("  ⚠️ Could not remove image: $docker_image")
+        fi
     else
-        echo "Preserved image because another container uses it: $docker_image"
+        purge_receipt+=("  Preserved image because another container uses it: $docker_image")
     fi
-    echo "Purged container resources: $docker_name"
+    for docker_destination in "${docker_bind_destinations[@]}"; do
+        purge_receipt+=("  Preserved bind mount: $docker_destination (host data unchanged)")
+    done
+    echo
+    printf '%*s\n' 114 '' | tr ' ' '='
+    echo "Purge complete: $docker_name"
+    printf '%s\n' "${purge_receipt[@]}"
+    printf '%*s\n' 114 '' | tr ' ' '='
+    echo "Estimated Docker storage released: $(human_bytes "$removed_estimate")"
+    echo "Docker Desktop virtual-disk capacity may not shrink immediately; freed space becomes reusable by Docker."
+    read -r -e -p "Press Enter to return to Docker container management. " _
 }
 
 docker_container_management_menu() {
@@ -1481,7 +1524,7 @@ docker_container_management_menu() {
         printf '%*s\n' 120 '' | tr ' ' '='
         management_footer_left="  [number] select to manage a container"
         management_footer_right="[q] Return to Docker list"
-        printf "%-*s%s\n" $((124 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
+        printf "%-*s%s\n" $((119 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
