@@ -1396,6 +1396,74 @@ docker_purge_unlocked_stopped() {
     echo "Removed $removed stopped container(s). Locked containers skipped: $locked."
 }
 
+docker_start_all_stopped() {
+    local docker_line docker_id docker_name docker_status confirmation started=0 failed=0
+    local -a docker_lines target_ids target_names
+    mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}' 2>/dev/null)
+    target_ids=(); target_names=()
+    for docker_line in "${docker_lines[@]}"; do
+        IFS=$'\t' read -r docker_id docker_name docker_status <<< "$docker_line"
+        [[ "$docker_status" == Up* ]] && continue
+        target_ids+=("$docker_id"); target_names+=("$docker_name")
+    done
+    if [ "${#target_ids[@]}" -eq 0 ]; then
+        echo
+        echo "All Docker containers are already running."
+        return 0
+    fi
+    echo
+    echo "The following stopped containers will be started:"
+    printf '  %s\n' "${target_names[@]}"
+    read -r -e -p "Type START ALL to continue: " confirmation
+    [ "$confirmation" = "START ALL" ] || { echo "Start all cancelled."; return 0; }
+    for docker_id in "${target_ids[@]}"; do
+        docker_name="$(docker inspect --format '{{.Name}}' "$docker_id" 2>/dev/null | sed 's#^/##')"
+        if docker start "$docker_id" >/dev/null 2>&1; then
+            echo "  ✅ Started: ${docker_name:-$docker_id}"
+            started=$((started + 1))
+        else
+            echo "  ❌ Could not start: ${docker_name:-$docker_id}"
+            failed=$((failed + 1))
+        fi
+    done
+    echo "Started $started container(s); $failed failed."
+    read -r -e -p "Press Enter to return to Docker container management. " _
+}
+
+docker_stop_all_running() {
+    local docker_line docker_id docker_name docker_status confirmation stopped=0 failed=0
+    local -a docker_lines target_ids target_names
+    mapfile -t docker_lines < <(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Status}}' 2>/dev/null)
+    target_ids=(); target_names=()
+    for docker_line in "${docker_lines[@]}"; do
+        IFS=$'\t' read -r docker_id docker_name docker_status <<< "$docker_line"
+        target_ids+=("$docker_id"); target_names+=("$docker_name")
+    done
+    if [ "${#target_ids[@]}" -eq 0 ]; then
+        echo
+        echo "No Docker containers are running."
+        return 0
+    fi
+    echo
+    echo "WARNING: This stops these running containers and locks them:"
+    printf '  %s\n' "${target_names[@]}"
+    read -r -e -p "Type STOP ALL to continue: " confirmation
+    [ "$confirmation" = "STOP ALL" ] || { echo "Stop all cancelled."; return 0; }
+    for docker_id in "${target_ids[@]}"; do
+        docker_name="$(docker inspect --format '{{.Name}}' "$docker_id" 2>/dev/null | sed 's#^/##')"
+        if docker stop "$docker_id" >/dev/null 2>&1; then
+            docker_set_lock_state "$docker_id" locked || true
+            echo "  ✅ Stopped and locked: ${docker_name:-$docker_id}"
+            stopped=$((stopped + 1))
+        else
+            echo "  ❌ Could not stop: ${docker_name:-$docker_id}"
+            failed=$((failed + 1))
+        fi
+    done
+    echo "Stopped and locked $stopped container(s); $failed failed."
+    read -r -e -p "Press Enter to return to Docker container management. " _
+}
+
 docker_purge_container_resources() {
     local docker_id="$1" docker_name="$2" docker_image docker_mount docker_type docker_volume docker_destination confirmation docker_writable_bytes docker_image_bytes docker_volume_mountpoint docker_volume_bytes index removed_estimate=0
     local -a docker_mounts docker_volumes docker_volume_sizes docker_bind_destinations purge_receipt
@@ -1524,10 +1592,13 @@ docker_container_management_menu() {
         printf '%*s\n' 120 '' | tr ' ' '='
         management_footer_left="  [number] select to manage a container"
         management_footer_right="[q] Return to Docker list"
+        echo "  [a] Start all stopped containers    [z] Stop all running containers (locks them)"
         printf "%-*s%s\n" $((119 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
+            a|A) docker_start_all_stopped; continue ;;
+            z|Z) docker_stop_all_running; continue ;;
         esac
         if ! [[ "$docker_choice" =~ ^[0-9]+$ ]] || [ "$docker_choice" -lt 1 ] || [ "$docker_choice" -gt "${#docker_lines[@]}" ]; then
             echo "❌ Enter a listed container number or q."
