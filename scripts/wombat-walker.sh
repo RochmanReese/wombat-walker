@@ -2257,7 +2257,7 @@ walk_filesystem() {
                     unset "back_history[$history_index]"
                     page=0
                 else
-                    echo "❌ There is no previous folder in this Walker session."
+                    notice="❌ There is no previous folder in this Walker session."
                 fi
                 ;;
             n|N) [ "$end_index" -lt "$total_entries" ] && page=$((page + 1)) || notice="❌ This is the last page." ;;
