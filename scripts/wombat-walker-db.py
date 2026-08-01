@@ -531,10 +531,6 @@ def cmd_list_mounts(_path):
     except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         fail(f"could not read the system mount table: {exc}")
 
-    def clipped(value, width):
-        value = value or "-"
-        return value if len(value) <= width else value[:width - 3] + "..."
-
     def flatten(nodes):
         for node in nodes:
             yield node
@@ -584,7 +580,7 @@ def cmd_list_mounts(_path):
                 partition_size = device.get("size") or 0
                 parent_size = parent.get("size") if parent else 0
                 if parent and parent.get("type") == "disk" and parent_size and partition_size / parent_size >= 0.99:
-                    kind_label = "Whole drive (single partition)"
+                    kind_label = "Whole drive"
                 else:
                     kind_label = "Partition"
                 backing_device = parent or device
@@ -619,21 +615,25 @@ def cmd_list_mounts(_path):
     # filesystem's real root, which removes bind mounts such as /tmp and the
     # repository sandbox while retaining genuine disks and network mounts.
     mounts = [mount for mount in flatten(mount_tree) if mount.get("fsroot") == "/"]
-    print(f"{'Mount path':<40}  {'Device/source':<20}  {'Type':<8}  {'UUID':<37}  Label")
-    print("=" * 132)
+    print("=" * 114)
     for mount in mounts:
-        target = mount.get("target")
-        source = mount.get("source")
-        print(f"{clipped(target, 40):<40}  {clipped(mount.get('source'), 20):<20}  {clipped(mount.get('fstype'), 8):<8}  {clipped(mount.get('uuid'), 37):<37}  {mount.get('label') or '-'}")
+        target = mount.get("target") or "-"
+        source = mount.get("source") or "-"
+        fstype = mount.get("fstype") or "-"
+        uuid = mount.get("uuid") or "-"
+        label = mount.get("label") or "-"
+        print(f"device:{source}  File System: {fstype}  UUID: {uuid}  Label: {label}")
+        print("-" * 114)
         usage = filesystem_usage(target)
         device_kind, connection = source_device_details(source)
         if usage:
             total, used, available, percent = usage
-            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent:<5}  Device: {device_kind}    Connection: {connection}")
+            print(f"Total size: {human_bytes(total)}  Used: {human_bytes(used)}  Free: {human_bytes(available)}  Used %: {percent}  Device: {device_kind}  Connection: {connection}")
         else:
-            print(f"Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable    Device: {device_kind}    Connection: {connection}")
-        if target and len(target) > 40:
-            print(f"Full mount path: {target}")
+            print(f"Total size: unavailable  Used: unavailable  Free: unavailable  Used %: unavailable  Device: {device_kind}  Connection: {connection}")
+        print("-" * 114)
+        print(f"Full mount path: {target}")
+        print("=" * 114)
         print()
 
 
