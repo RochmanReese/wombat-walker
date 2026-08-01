@@ -1129,6 +1129,7 @@ docker_search_choose_container() {
         [ "$docker_end" -gt "${#docker_lines[@]}" ] && docker_end="${#docker_lines[@]}"
         echo
         echo "Choose a Docker container to search"
+        printf '%*s\n' 114 '' | tr ' ' '='
         printf "  %-5s%-13s%-25s%-20s%-28s\n" "No." "ID" "Container" "Status" "Image"
         for ((docker_choice=docker_start; docker_choice<docker_end; docker_choice++)); do
             IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "${docker_lines[$docker_choice]}"
