@@ -2367,20 +2367,12 @@ walk_filesystem() {
             s|S)
                 search_combined="off"
                 search_direct="off"
-                read -r -e -p "Enter search words (q to cancel): " search_words
-                case "$search_words" in
-                    q|Q) echo "Search cancelled."; continue ;;
-                    "") echo "Search cancelled."; continue ;;
-                esac
-                echo "Refreshing Walker's saved search index below: $current"
-                if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$current" little; then
-                    echo "❌ Could not refresh this folder's search index. Search was cancelled."
-                    continue
-                fi
-                echo "  [1] Search this folder"
-                echo "  [2] Deep search all files and folders in this folder"
+                search_scope=""
+                echo "Where do you want to search?"
+                echo "  [1] This folder only"
+                echo "  [2] This folder and all descendants"
                 echo "  [3] Search every saved host-folder scan"
-                echo "  [4] Search another folder (refresh it first)"
+                echo "  [4] Choose another folder"
                 echo "  [5] Search saved host and Docker scans"
                 read -r -e -p "> " search_scope_choice
                 case "$search_scope_choice" in
@@ -2388,37 +2380,53 @@ walk_filesystem() {
                     2) search_scope="$current" ;;
                     3) search_scope="" ;;
                     4)
-                        read -r -e -p "Folder to refresh and search: " search_custom_folder
-                        [ -n "$search_custom_folder" ] || { echo "❌ Enter a folder path."; continue; }
+                        read -r -e -p "Folder to search (q to cancel): " search_custom_folder
+                        case "$search_custom_folder" in q|Q|"") echo "Search cancelled."; continue ;; esac
                         if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
                             echo "❌ That folder is unavailable or cannot be read: $search_custom_folder"
                             continue
                         fi
                         search_scope="$(realpath "$search_custom_folder")"
-                        echo "Refreshing Walker's saved search index below: $search_scope"
-                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$search_scope" little; then
-                            echo "❌ Could not refresh that folder's search index. Search was cancelled."
-                            continue
-                        fi
                         ;;
                     5) search_scope=""; search_combined="on" ;;
-                    *) echo "❌ Enter 1, 2, 3, 4, or 5."; continue ;;
+                    q|Q|"") echo "Search cancelled."; continue ;;
+                    *) echo "❌ Enter 1, 2, 3, 4, 5, or q."; continue ;;
                 esac
+                if [ -n "$search_scope" ]; then
+                    echo "This search will refresh: $search_scope"
+                    read -r -e -p "Refresh this folder before searching? [Y/n] " search_refresh_choice
+                    case "$search_refresh_choice" in
+                        n|N|no|NO) ;;
+                        *)
+                            echo "Refreshing Walker's saved search index below: $search_scope"
+                            if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$search_scope" little; then
+                                echo "❌ Could not refresh this folder's search index. Search was cancelled."
+                                continue
+                            fi
+                            ;;
+                    esac
+                fi
+                read -r -e -p "Enter search words (q to cancel): " search_words
+                case "$search_words" in
+                    q|Q|"") echo "Search cancelled."; continue ;;
+                esac
+                search_min_size=""
+                search_max_size=""
                 search_offset=0
                 search_order="relevance"
                 while true; do
                     echo
                     if [ "$search_combined" = "on" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search "$WALKER_DATABASE" "$search_words" "$SEARCH_LIMIT" "$search_offset" "$search_order" || break
+                        python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search "$WALKER_DATABASE" "$search_words" "$SEARCH_LIMIT" "$search_offset" "$search_order" "$search_min_size" "$search_max_size" || break
                     elif [ "$search_direct" = "on" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" || break
+                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" || break
                     elif [ -n "$search_scope" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" || break
+                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" || break
                     else
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" - "$search_order" || break
+                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" - "$search_order" "$search_min_size" "$search_max_size" || break
                     fi
-                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [q] Return"
-                    read -r -e -p "Open displayed result number, or choose n/p/o/q: " search_result_number
+                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [q] Return"
+                    read -r -e -p "Open result number, or choose n/p/o/f/q: " search_result_number
                     case "$search_result_number" in
                         q|Q|"") break ;;
                         n|N) search_offset=$((search_offset + SEARCH_LIMIT)); continue ;;
@@ -2437,6 +2445,12 @@ walk_filesystem() {
                             search_offset=0
                             continue
                             ;;
+                        f|F)
+                            read -r -e -p "Minimum logical size (blank for none, e.g. 100MB): " search_min_size
+                            read -r -e -p "Maximum logical size (blank for none): " search_max_size
+                            search_offset=0
+                            continue
+                            ;;
                     esac
                     if ! [[ "$search_result_number" =~ ^[0-9]+$ ]] || [ "$search_result_number" -le "$search_offset" ] || [ "$search_result_number" -gt $((search_offset + SEARCH_LIMIT)) ]; then
                         echo "❌ Enter a result number shown on this page, n, p, o, or q."
@@ -2444,14 +2458,14 @@ walk_filesystem() {
                     fi
                     if [ "$search_combined" = "on" ]; then
                         combined_result_fields=()
-                        mapfile -d '' -t combined_result_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search-path "$WALKER_DATABASE" "$search_words" "$search_result_number" "$search_order" 2>/dev/null || true)
+                        mapfile -d '' -t combined_result_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search-path "$WALKER_DATABASE" "$search_words" "$search_result_number" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null || true)
                         cached_path="${combined_result_fields[4]:-}"
                     elif [ "$search_direct" = "on" ]; then
-                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" 2>/dev/null || true)"
+                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null || true)"
                     elif [ -n "$search_scope" ]; then
-                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" 2>/dev/null || true)"
+                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null || true)"
                     else
-                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" - "$search_order" 2>/dev/null || true)"
+                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" - "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null || true)"
                     fi
                     break
                 done

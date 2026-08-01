@@ -950,7 +950,7 @@ def search_order_sql(order, table="entries", fts_table=None):
     return orders[order]
 
 
-def docker_search_rows(conn, words, limit, container_id=None, path_prefix=None, order="relevance"):
+def docker_search_rows(conn, words, limit, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
     tokens = search_tokens(words)
     query = fts_query(tokens)
     sql = """
@@ -965,6 +965,12 @@ def docker_search_rows(conn, words, limit, container_id=None, path_prefix=None, 
     if container_id:
         sql += " AND containers.container_id=?"
         args.append(container_id)
+    if min_size is not None:
+        sql += " AND COALESCE(entries.logical_size_bytes, 0)>=?"
+        args.append(min_size)
+    if max_size is not None:
+        sql += " AND COALESCE(entries.logical_size_bytes, 0)<=?"
+        args.append(max_size)
     if path_prefix:
         prefix = path_prefix.rstrip("/") + "/" if path_prefix != "/" else "/"
         sql += " AND (entries.container_path=? OR substr(entries.container_path, 1, length(?))=?)"
@@ -1038,13 +1044,13 @@ def cmd_docker_search_path(path, words, number, container_id=None, path_prefix=N
     conn.close()
 
 
-def combined_search_rows(conn, words, limit, offset=0, order="relevance"):
+def combined_search_rows(conn, words, limit, offset=0, order="relevance", min_size=None, max_size=None):
     # Fetch enough top records from each independently indexed source to make the combined page
     # exact. A global page starting at offset N cannot contain an item ranked below N in either
     # source, so limit + offset from each source is sufficient.
     fetch_limit = min(10000, limit + offset)
-    host_rows, _, host_total = search_rows(conn, words, "-", fetch_limit, 0, None, order)
-    docker_rows, docker_total = docker_search_rows(conn, words, fetch_limit, None, None, order)
+    host_rows, _, host_total = search_rows(conn, words, "-", fetch_limit, 0, None, order, False, min_size, max_size)
+    docker_rows, docker_total = docker_search_rows(conn, words, fetch_limit, None, None, order, min_size, max_size)
     rows = []
     for entry_type, logical, mtime_ns, entry_path, root_path, status, scanned_at in host_rows:
         rows.append(("host", entry_type, logical or 0, mtime_ns or 0, root_path, entry_path, "", "", status, scanned_at))
@@ -1063,7 +1069,7 @@ def combined_search_rows(conn, words, limit, offset=0, order="relevance"):
     return rows[offset:offset + limit], host_total + docker_total
 
 
-def cmd_combined_search(path, words, limit, offset=0, order="relevance"):
+def cmd_combined_search(path, words, limit, offset=0, order="relevance", min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if not 1 <= limit <= 10000:
@@ -1071,9 +1077,13 @@ def cmd_combined_search(path, words, limit, offset=0, order="relevance"):
     if offset < 0:
         fail("search offset cannot be negative")
     conn = connect(path)
-    rows, total = combined_search_rows(conn, words, limit, offset, order)
+    rows, total = combined_search_rows(conn, words, limit, offset, order, min_size, max_size)
     order_label = "alphabetical" if order == "relevance" else order
-    print(f"Combined search: {words!r}    Scope: saved filesystem + saved Docker scans    Order: {order_label}")
+    filters = []
+    if min_size is not None: filters.append(f"minimum size {human_bytes(min_size)}")
+    if max_size is not None: filters.append(f"maximum size {human_bytes(max_size)}")
+    filter_label = f"    Filters: {', '.join(filters)}" if filters else ""
+    print(f"Combined search: {words!r}    Scope: saved filesystem + saved Docker scans    Order: {order_label}{filter_label}")
     if not rows:
         print("No matching cached paths.")
         conn.close()
@@ -1091,13 +1101,13 @@ def cmd_combined_search(path, words, limit, offset=0, order="relevance"):
     conn.close()
 
 
-def cmd_combined_search_path(path, words, number, order="relevance"):
+def cmd_combined_search_path(path, words, number, order="relevance", min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if number < 1 or number > 10000:
         fail("search result number must be between 1 and 10000")
     conn = connect(path)
-    rows, _ = combined_search_rows(conn, words, number, 0, order)
+    rows, _ = combined_search_rows(conn, words, number, 0, order, min_size, max_size)
     if len(rows) < number:
         conn.close()
         fail("search result number is outside the result list")
@@ -1123,7 +1133,7 @@ def fts_query(tokens):
     return " AND ".join('"' + token.replace('"', '""') + '"*' for token in tokens)
 
 
-def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False):
+def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False, min_size=None, max_size=None):
     root_id = None
     if root != "-":
         row = conn.execute("SELECT id FROM scan_roots WHERE root_path=?", (root,)).fetchone()
@@ -1148,6 +1158,12 @@ def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="rel
     if root_id is not None:
         sql += " AND entries.root_id=?"
         args.append(root_id)
+    if min_size is not None:
+        sql += " AND COALESCE(entries.logical_size_bytes, 0)>=?"
+        args.append(min_size)
+    if max_size is not None:
+        sql += " AND COALESCE(entries.logical_size_bytes, 0)<=?"
+        args.append(max_size)
     if path_prefix:
         path_prefix = database_path_text(os.path.realpath(path_prefix))
         if direct_only and path_prefix == "/":
@@ -1171,7 +1187,7 @@ def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="rel
     return rows, root_id, total
 
 
-def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False):
+def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False, min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if not 1 <= limit <= 10000:
@@ -1179,12 +1195,16 @@ def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="rele
     if offset < 0:
         fail("search offset cannot be negative")
     conn = connect(path)
-    rows, root_id, total = search_rows(conn, words, root, limit, offset, path_prefix, order, direct_only)
+    rows, root_id, total = search_rows(conn, words, root, limit, offset, path_prefix, order, direct_only, min_size, max_size)
     scope = root if root_id is not None else "all saved scans"
     if path_prefix:
         relation = " directly in" if direct_only else " below"
         scope += f"{relation} {os.path.realpath(path_prefix)}"
-    print(f"Search: {words!r}    Scope: {scope}    Order: {order}")
+    filters = []
+    if min_size is not None: filters.append(f"minimum size {human_bytes(min_size)}")
+    if max_size is not None: filters.append(f"maximum size {human_bytes(max_size)}")
+    filter_label = f"    Filters: {', '.join(filters)}" if filters else ""
+    print(f"Search: {words!r}    Scope: {scope}    Order: {order}{filter_label}")
     if not rows:
         print("No matching cached paths.")
         conn.close()
@@ -1209,13 +1229,13 @@ def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="rele
     conn.close()
 
 
-def cmd_search_path(path, words, root, number, path_prefix=None, order="relevance", direct_only=False):
+def cmd_search_path(path, words, root, number, path_prefix=None, order="relevance", direct_only=False, min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if number < 1 or number > 10000:
         fail("search result number must be between 1 and 10000")
     conn = connect(path)
-    rows, _, _ = search_rows(conn, words, root, number, 0, path_prefix, order, direct_only)
+    rows, _, _ = search_rows(conn, words, root, number, 0, path_prefix, order, direct_only, min_size, max_size)
     if len(rows) < number:
         fail("search result number is outside the result list")
     sys.stdout.buffer.write(filesystem_path_text(rows[number - 1][3]).encode("utf-8", "surrogateescape"))
@@ -1235,6 +1255,19 @@ def human_bytes(value):
         value /= 1000
         unit += 1
     return f"{value:.0f}{units[unit]}" if unit == 0 else f"{value:.2f}{units[unit]}"
+
+
+def parse_size_filter(value):
+    if value in {None, "", "-"}:
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB)?\s*", value, re.IGNORECASE)
+    if not match:
+        fail("size filters must look like 100MB, 1.5GB, or 5000000B")
+    number = float(match.group(1))
+    unit = (match.group(2) or "B").upper()
+    multipliers = {"B": 1, "KB": 1000, "MB": 1000**2, "GB": 1000**3, "TB": 1000**4, "PB": 1000**5,
+                   "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3, "TIB": 1024**4, "PIB": 1024**5}
+    return int(number * multipliers[unit])
 
 
 def format_time(value):
@@ -1495,7 +1528,7 @@ def cmd_scan(path, target, context):
 
 
 def main():
-    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-direct", "search-path", "search-direct-path", "combined-search", "combined-search-path"}:
+    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10, 11} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-direct", "search-path", "search-direct-path", "combined-search", "combined-search-path"}:
         print(__doc__, file=sys.stderr)
         return 1
     try:
@@ -1551,17 +1584,25 @@ def main():
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]), None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
             else:
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]))
-        elif sys.argv[1] in {"search", "search-direct"} and len(sys.argv) in {5, 6, 7, 8, 9}:
+        elif sys.argv[1] in {"search", "search-direct"} and len(sys.argv) in {5, 6, 7, 8, 9, 10, 11}:
             limit = int(sys.argv[5]) if len(sys.argv) >= 6 else 100
             offset = int(sys.argv[6]) if len(sys.argv) >= 7 else 0
             path_prefix = None if len(sys.argv) < 8 or sys.argv[7] == "-" else sys.argv[7]
-            cmd_search(path, sys.argv[3], sys.argv[4], limit, offset, path_prefix, sys.argv[8] if len(sys.argv) == 9 else "relevance", sys.argv[1] == "search-direct")
-        elif sys.argv[1] in {"search-path", "search-direct-path"} and len(sys.argv) in {6, 7, 8}:
-            cmd_search_path(path, sys.argv[3], sys.argv[4], int(sys.argv[5]), None if len(sys.argv) < 7 or sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance", sys.argv[1] == "search-direct-path")
-        elif sys.argv[1] == "combined-search" and len(sys.argv) in {4, 5, 6, 7}:
-            cmd_combined_search(path, sys.argv[3], int(sys.argv[4]) if len(sys.argv) >= 5 else 100, int(sys.argv[5]) if len(sys.argv) >= 6 else 0, sys.argv[6] if len(sys.argv) == 7 else "relevance")
-        elif sys.argv[1] == "combined-search-path" and len(sys.argv) in {5, 6}:
-            cmd_combined_search_path(path, sys.argv[3], int(sys.argv[4]), sys.argv[5] if len(sys.argv) == 6 else "relevance")
+            min_size = parse_size_filter(sys.argv[9]) if len(sys.argv) >= 10 else None
+            max_size = parse_size_filter(sys.argv[10]) if len(sys.argv) >= 11 else None
+            cmd_search(path, sys.argv[3], sys.argv[4], limit, offset, path_prefix, sys.argv[8] if len(sys.argv) >= 9 else "relevance", sys.argv[1] == "search-direct", min_size, max_size)
+        elif sys.argv[1] in {"search-path", "search-direct-path"} and len(sys.argv) in {6, 7, 8, 9, 10}:
+            min_size = parse_size_filter(sys.argv[8]) if len(sys.argv) >= 9 else None
+            max_size = parse_size_filter(sys.argv[9]) if len(sys.argv) >= 10 else None
+            cmd_search_path(path, sys.argv[3], sys.argv[4], int(sys.argv[5]), None if len(sys.argv) < 7 or sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) >= 8 else "relevance", sys.argv[1] == "search-direct-path", min_size, max_size)
+        elif sys.argv[1] == "combined-search" and len(sys.argv) in {4, 5, 6, 7, 8, 9}:
+            min_size = parse_size_filter(sys.argv[7]) if len(sys.argv) >= 8 else None
+            max_size = parse_size_filter(sys.argv[8]) if len(sys.argv) >= 9 else None
+            cmd_combined_search(path, sys.argv[3], int(sys.argv[4]) if len(sys.argv) >= 5 else 100, int(sys.argv[5]) if len(sys.argv) >= 6 else 0, sys.argv[6] if len(sys.argv) >= 7 else "relevance", min_size, max_size)
+        elif sys.argv[1] == "combined-search-path" and len(sys.argv) in {5, 6, 7, 8}:
+            min_size = parse_size_filter(sys.argv[6]) if len(sys.argv) >= 7 else None
+            max_size = parse_size_filter(sys.argv[7]) if len(sys.argv) >= 8 else None
+            cmd_combined_search_path(path, sys.argv[3], int(sys.argv[4]), sys.argv[5] if len(sys.argv) >= 6 else "relevance", min_size, max_size)
         else:
             fail("invalid action or arguments")
     except (DatabaseError, OSError, sqlite3.Error) as exc:

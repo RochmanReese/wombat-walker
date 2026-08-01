@@ -100,7 +100,7 @@ Inside Walker, the bottom of each view shows the available keys. The most common
 | `.` | Shows the current folder path; in picker mode, returns it to the calling app. |
 | `u` / `d` | Go up one folder / return to the previous folder. |
 | `o` | Change folder display order. |
-| `s` | Refresh and search the current folder, another chosen folder, or saved inventories. |
+| `s` | Choose a scope, refresh if needed, and search; refine results by size. |
 | `x` | Open Help & utilities: Docker, mounts, scan refresh, cleanup, preferences, help, and shell. |
 | `!` | Open a normal shell in the current folder; type `exit` to return. |
 | `q` | Return or quit safely. |
@@ -111,11 +111,13 @@ A live folder listing is immediate. A **saved scan** is optional metadata—path
 timestamps—not file contents. It makes later searches fast and is especially valuable on archive
 drives or large Docker installations.
 
-When you choose **Search folders & files**, Walker first refreshes the current folder and its
-descendants, so that scope includes files currently visible in the browser. You can then search
-that refreshed folder, refresh and search another chosen folder, search every saved host scan, or
-search a combined host-and-Docker view. Utilities → **Update saved scan below this folder** remains
-available when you want to refresh an inventory without searching. Search results can be sorted
+When you choose **Search folders & files**, Walker first asks which scope to search. A selected
+folder can be refreshed before searching so its results include current files. You can search the
+current folder, all its descendants, another chosen folder, every saved host scan, or a combined
+host-and-Docker view. From the results screen, use **[f] Refine search** to narrow
+a large result set by minimum or maximum logical file size (for example, `100MB`). Utilities →
+**Update saved scan below this folder** remains available when you want to refresh an inventory
+without searching. Search results can be sorted
 alphabetically, by logical size, or by last modified date. A search for an Ollama model name may
 not find its large weight blobs because Ollama stores them as SHA-256 filenames; browse the blobs
 folder and sort by size instead.
