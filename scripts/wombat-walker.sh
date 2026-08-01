@@ -1402,10 +1402,23 @@ docker_container_management_menu() {
             case "$confirmation" in
                 b|B|q|Q|"") break ;;
                 1)
-                    if docker start "$docker_id" >/dev/null 2>&1; then docker_status="Up"; docker_notice="✅ Container started: $docker_name"; else docker_notice="❌ Could not start $docker_name."; fi
+                    if [[ "$docker_status" == Up* ]]; then
+                        docker_notice="ℹ️ Container already running: $docker_name"
+                    elif docker start "$docker_id" >/dev/null 2>&1; then
+                        docker_status="Up"; docker_notice="✅ Container started: $docker_name"
+                    else
+                        docker_notice="❌ Could not start $docker_name."
+                    fi
                     ;;
                 2)
-                    if docker stop "$docker_id" >/dev/null 2>&1; then docker_status="Exited"; docker_set_lock_state "$docker_id" locked || true; docker_notice="✅ Container stopped and locked: $docker_name"; else docker_notice="❌ Could not stop $docker_name."; fi
+                    if [[ "$docker_status" != Up* ]]; then
+                        docker_set_lock_state "$docker_id" locked || true
+                        docker_notice="ℹ️ Container already stopped and locked: $docker_name"
+                    elif docker stop "$docker_id" >/dev/null 2>&1; then
+                        docker_status="Exited"; docker_set_lock_state "$docker_id" locked || true; docker_notice="✅ Container stopped and locked: $docker_name"
+                    else
+                        docker_notice="❌ Could not stop $docker_name."
+                    fi
                     ;;
                 3)
                     docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
