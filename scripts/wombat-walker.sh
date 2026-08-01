@@ -2415,8 +2415,12 @@ walk_filesystem() {
                             echo
                             [ "$search_folder_picker_end" -lt "$search_folder_picker_total" ] && printf "  %-34s" "[n] Next page"
                             [ "$search_folder_picker_page" -gt 0 ] && printf "%-34s" "[p] Previous page"
-                            printf "%s\n" "[o] Change folder order    [q] Cancel"
-                            read -r -e -p "Choose a displayed folder number, n/p/o/q: " search_folder_choice
+                            if [ -n "$notice" ]; then
+                                echo "  $notice"
+                                notice=""
+                            fi
+                            printf "%s\n" "[o] Change folder order    [m] Type a path manually    [q] Cancel"
+                            read -r -e -p "Choose a displayed folder number, n/p/o/m/q: " search_folder_choice
                             case "$search_folder_choice" in
                                 q|Q|"") notice="Search cancelled."; break ;;
                                 n|N)
@@ -2437,9 +2441,26 @@ walk_filesystem() {
                                     search_folder_picker_entries=("${entries[@]}")
                                     search_folder_picker_page=0
                                     ;;
+                                m|M)
+                                    read -r -e -p "Enter absolute folder path (start with /, e.g. /home/wombat; q to cancel): " search_manual_folder
+                                    case "$search_manual_folder" in
+                                        q|Q|"") notice="Search cancelled."; break ;;
+                                    esac
+                                    if [ "$search_manual_folder" = "~" ]; then
+                                        search_manual_folder="$HOME"
+                                    elif [[ "$search_manual_folder" == "~/"* ]]; then
+                                        search_manual_folder="$HOME/${search_manual_folder#~/}"
+                                    fi
+                                    if [ ! -d "$search_manual_folder" ] || [ ! -r "$search_manual_folder" ] || [ ! -x "$search_manual_folder" ]; then
+                                        notice="❌ That folder is unavailable or cannot be read: $search_manual_folder"
+                                    else
+                                        search_scope="$(realpath "$search_manual_folder")"
+                                        break
+                                    fi
+                                    ;;
                                 *)
                                     if ! [[ "$search_folder_choice" =~ ^[0-9]+$ ]] || [ "$search_folder_choice" -lt 1 ] || [ "$search_folder_choice" -gt "$search_folder_picker_total" ] || [ "$search_folder_choice" -lt $((search_folder_picker_start + 1)) ] || [ "$search_folder_choice" -gt "$search_folder_picker_end" ]; then
-                                        notice="❌ Enter a displayed folder number, n, p, o, or q."
+                                        notice="❌ Enter a displayed folder number, n, p, o, m, or q."
                                     elif [ ! -d "${search_folder_picker_entries[$((search_folder_choice - 1))]}" ] || [ -L "${search_folder_picker_entries[$((search_folder_choice - 1))]}" ]; then
                                         notice="❌ That item is a file. Choose a row marked dir."
                                     else
