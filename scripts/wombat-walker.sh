@@ -1228,10 +1228,10 @@ DOCKER_LOCKS_FILE="${WOMBAT_WALKER_DOCKER_LOCKS:-$HOME/.local/state/wombat-walke
 docker_lock_state() {
     local docker_id="$1" docker_status="$2" saved_state
     saved_state="$(awk -F '\t' -v id="$docker_id" '$1 == id { print $2; exit }' "$DOCKER_LOCKS_FILE" 2>/dev/null || true)"
-    if [ "$saved_state" = "locked" ] || [ "$saved_state" = "unlocked" ]; then
+    if [[ "$docker_status" == Up* ]]; then
+        printf 'locked'
+    elif [ "$saved_state" = "locked" ] || [ "$saved_state" = "unlocked" ]; then
         printf '%s' "$saved_state"
-    elif [[ "$docker_status" == Up* ]]; then
-        printf 'unlocked'
     else
         printf 'locked'
     fi
@@ -1441,7 +1441,9 @@ docker_container_management_menu() {
                     ;;
                 4)
                     docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
-                    if [ "$docker_state" = "locked" ]; then
+                    if [[ "$docker_status" == Up* ]]; then
+                        docker_notice="❌ Running containers remain locked. Stop the container before unlocking it."
+                    elif [ "$docker_state" = "locked" ]; then
                         read -r -e -p "Type the container name to unlock ($docker_name): " confirmation
                         if [ "$confirmation" = "$docker_name" ] && docker_set_lock_state "$docker_id" unlocked; then docker_notice="✅ Container unlocked: $docker_name"; else docker_notice="❌ Unlock cancelled."; fi
                     else
