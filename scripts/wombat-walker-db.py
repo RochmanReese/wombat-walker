@@ -991,6 +991,18 @@ def docker_search_rows(conn, words, limit, offset=0, container_id=None, path_pre
     return rows, total
 
 
+def docker_container_runs_as(container_id):
+    """Return the configured Docker user for display; an empty value uses the image default."""
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.Config.User}}", container_id],
+            check=True, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip() or "image default"
+
+
 def cmd_docker_search(path, words, limit, offset=0, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
@@ -1022,9 +1034,11 @@ def cmd_docker_search(path, words, limit, offset=0, container_id=None, path_pref
             print("=" * 114)
             print(f"Container: {container_name}    Storage: {storage}")
             print(f"Saved scan: {finished_at or 'unknown'} ({status})")
-            print(f"{'No.':<5}{'Type':<10}{'Logical size':>12}  {'On disk':>12}  Path")
+            print()
+            runs_as = docker_container_runs_as(container_id)
+            print(f"{'No.':<5}{'Type':<10}{'Runs as':<16}{'Logical':>12}  {'On disk':>12}  Path")
             last_group = group
-        print(f"[{number}]".ljust(5) + f"{entry_type:<10}{human_bytes(logical or 0):>12}  {human_bytes(allocated or 0):>12}  {entry_path}")
+        print(f"[{number}]".ljust(5) + f"{entry_type:<10}{runs_as:<16}{human_bytes(logical or 0):>12}  {human_bytes(allocated or 0):>12}  {entry_path}")
     if total > offset + len(rows):
         print(f"\nShowing {offset + 1:,}-{offset + len(rows):,} of {total:,} results.")
     conn.close()

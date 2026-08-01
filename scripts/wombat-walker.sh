@@ -1242,7 +1242,8 @@ docker_search_menu() {
             echo "❌ Docker saved-search request failed."
             return 0
         fi
-        echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [r] New search words    [q] Return"
+        echo
+        echo "[n] Next page   [p] Previous page   [o] Change result order   [f] Refine search   [r] New search words  [q] Return"
         read -r -e -p "Open result number, or choose n/p/o/f/r/q: " docker_result_number
         case "$docker_result_number" in
             q|Q|"") return 0 ;;
