@@ -2499,8 +2499,34 @@ walk_filesystem() {
                 done
                 [ -n "${search_result_number:-}" ] && [[ "$search_result_number" =~ ^[0-9]+$ ]] || continue
                 if [ -z "$cached_path" ]; then
-                    echo "❌ That result is outside the displayed search results."
+                    notice="❌ That result is outside the displayed search results."
                     continue
+                fi
+                if [ -e "$cached_path" ] || [ -L "$cached_path" ]; then
+                    echo
+                    echo "Selected search result: $cached_path"
+                    if [ -f "$cached_path" ] && [ ! -L "$cached_path" ]; then
+                        echo "  [o] Open file (view or edit)"
+                    elif [ -d "$cached_path" ] && [ ! -L "$cached_path" ]; then
+                        echo "  [o] Browse this folder"
+                    else
+                        echo "  [o] Open this result"
+                    fi
+                    echo "  [g] Manage search result (copy, move, rename, Trash)"
+                    echo "  [q] Return to search results"
+                    read -r -e -p "> " search_result_action
+                    case "$search_result_action" in
+                        g|G)
+                            file_management_menu "$cached_path" || true
+                            if [ -n "${FILE_MANAGEMENT_RESULT:-}" ]; then
+                                python3 "$SCRIPT_DIR/wombat-walker-db.py" mark-stale "$WALKER_DATABASE" "$(dirname "$cached_path")" >/dev/null 2>&1 || true
+                                echo "Search result management completed: ${FILE_MANAGEMENT_RESULT^}."
+                                FILE_MANAGEMENT_RESULT=""
+                            fi
+                            continue
+                            ;;
+                        q|Q|"") continue ;;
+                    esac
                 fi
                 if [ "$search_combined" = "on" ] && [ "${combined_result_fields[0]:-}" = "docker" ]; then
                     if [ "${combined_result_fields[3]:-}" = "directory" ]; then
