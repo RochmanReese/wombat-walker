@@ -740,6 +740,15 @@ def nvme_temperature_c(value):
     return int(value - 273.15) if value >= 273 else value
 
 
+def human_timestamp(value):
+    """Render a stored UTC timestamp in the local timezone for Walker's interactive UI."""
+    try:
+        local = datetime.fromisoformat(value).astimezone()
+        return f"{local.strftime('%B')} {local.day} {local:%H:%M}"
+    except (TypeError, ValueError):
+        return value
+
+
 def print_health_columns(*values):
     """Render three compact, aligned health readings across Walker's 114-character UI."""
     print("   ".join(f"{label}: {value}".ljust(36) for label, value in values))
@@ -811,7 +820,7 @@ def cmd_disk_health(path, device_path, use_sudo=False):
     print_health_columns(("Power-on hours", nvme_display(power_on_hours)), ("Power cycles", nvme_display(power_cycles)), ("Unsafe shutdowns", nvme_display(unsafe_shutdowns)))
     print_health_columns(("Data read", human_bytes(read_bytes) if read_bytes is not None else "not reported"), ("Data written", human_bytes(written_bytes) if written_bytes is not None else "not reported"), ("Error log entries", nvme_display(error_log_entries)))
     print("=" * 114)
-    print(f"Snapshot saved: {captured_at}    Collector: {'sudo nvme smart-log' if use_sudo else 'nvme smart-log'}")
+    print(f"Snapshot saved: {human_timestamp(captured_at)}    Collector: {'sudo nvme smart-log' if use_sudo else 'nvme smart-log'}")
 
 
 def cmd_disk_health_history(path):
@@ -829,7 +838,9 @@ def cmd_disk_health_history(path):
         conn.close()
     output = sys.stdout.buffer
     for row in rows:
-        for value in row:
+        for index, value in enumerate(row):
+            if index == 1:
+                value = human_timestamp(value)
             output.write(str(value if value is not None else "not reported").encode("utf-8", "surrogateescape") + b"\0")
 
 
@@ -848,7 +859,7 @@ def cmd_disk_health_snapshot(path, snapshot_id):
     written_bytes = row["data_units_written"] * 512000 if row["data_units_written"] is not None else None
     print("=" * 114)
     print(f"Saved NVMe health snapshot — {row['device_path']}")
-    print(f"Captured: {row['captured_at']}    Collector: {row['collector']}")
+    print(f"Captured: {human_timestamp(row['captured_at'])}    Collector: {row['collector']}")
     print(f"Model: {row['model'] or '-'}    Serial: {row['serial'] or '-'}    Firmware: {row['firmware'] or '-'}")
     print("=" * 114)
     warning_text = "none" if str(row["critical_warning"]) == "0" else row["critical_warning"]
