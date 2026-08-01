@@ -377,7 +377,18 @@ browse_protected_folder() {
                 [ -d "$target" ] && current="$target" || echo "❌ That protected path is not a directory."
                 ;;
             *)
-                if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#entries[@]}" ]; then
+                if [[ "$choice" == /* || "$choice" == "~" || "$choice" == "~/"* ]]; then
+                    manual_path="$choice"
+                    [ "$manual_path" = "~" ] && manual_path="$HOME"
+                    [[ "$manual_path" == "~/"* ]] && manual_path="$HOME/${manual_path#\~/}"
+                    if [ -d "$manual_path" ]; then
+                        back_history+=("$current"); current="$(realpath "$manual_path")"; page=0
+                    elif [ -f "$manual_path" ] && [ ! -L "$manual_path" ]; then
+                        file_action_menu "$(realpath "$manual_path")"
+                    else
+                        notice="❌ That path does not exist or is not an ordinary folder/file: $choice"
+                    fi
+                elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#entries[@]}" ]; then
                     target="${entries[$((choice - 1))]}"
                     if [ -d "$target" ]; then
                         current="$target"
@@ -2396,14 +2407,14 @@ walk_filesystem() {
                 if [ "$manual_path" = "~" ]; then
                     manual_path="$HOME"
                 elif [[ "$manual_path" == "~/"* ]]; then
-                    manual_path="$HOME/${manual_path#~/}"
+                    manual_path="$HOME/${manual_path#\~/}"
                 fi
                 if [ ! -e "$manual_path" ]; then
                     notice="❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."
                     continue
                 fi
                 if [ -d "$manual_path" ]; then
-                    back_history+=("$current"); current="$(realpath "$manual_path")"; page=0
+                    back_history+=("$current"); current="$(realpath "$manual_path")"; page=0; notice=""
                 elif [ -f "$manual_path" ] && [ ! -L "$manual_path" ]; then
                     file_action_menu "$(realpath "$manual_path")"
                 elif [ -L "$manual_path" ]; then
@@ -2492,7 +2503,7 @@ walk_filesystem() {
                                     if [ "$search_manual_folder" = "~" ]; then
                                         search_manual_folder="$HOME"
                                     elif [[ "$search_manual_folder" == "~/"* ]]; then
-                                        search_manual_folder="$HOME/${search_manual_folder#~/}"
+                                        search_manual_folder="$HOME/${search_manual_folder#\~/}"
                                     fi
                                     if [ ! -d "$search_manual_folder" ] || [ ! -r "$search_manual_folder" ] || [ ! -x "$search_manual_folder" ]; then
                                         notice="❌ That folder is unavailable or cannot be read: $search_manual_folder"
@@ -2700,7 +2711,18 @@ walk_filesystem() {
                 ;;
             q|Q) echo "Cancelled."; return 0 ;;
             *)
-                if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#entries[@]}" ]; then
+                if [[ "$choice" == /* || "$choice" == "~" || "$choice" == "~/"* ]]; then
+                    manual_path="$choice"
+                    [ "$manual_path" = "~" ] && manual_path="$HOME"
+                    [[ "$manual_path" == "~/"* ]] && manual_path="$HOME/${manual_path#\~/}"
+                    if [ -d "$manual_path" ]; then
+                        back_history+=("$current"); current="$(realpath "$manual_path")"; page=0; notice=""
+                    elif [ -f "$manual_path" ] && [ ! -L "$manual_path" ]; then
+                        file_action_menu "$(realpath "$manual_path")"
+                    else
+                        notice="❌ That path does not exist or is not an ordinary folder/file: $choice"
+                    fi
+                elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#entries[@]}" ]; then
                     child="${entries[$((choice - 1))]}"
                     if [ -d "$child" ] && [ ! -L "$child" ]; then back_history+=("$current"); current="$(realpath "$child")"; page=0
                     elif [ -f "$child" ] && [ ! -L "$child" ]; then file_action_menu "$(realpath "$child")"
@@ -2711,7 +2733,7 @@ walk_filesystem() {
                         echo "❌ This selection is not an ordinary regular file. Manage it outside Wombat Walker."
                     fi
                 else
-                    notice="❌ Enter a listed number, ., !, u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
+                    notice="❌ Enter a listed number, a path such as /home/wombat or ~/, ., !, u, d, n, p, m, s, o, x, or q."
                 fi
                 ;;
         esac
