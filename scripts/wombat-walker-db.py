@@ -1102,6 +1102,8 @@ def cmd_combined_search_path(path, words, number, order="relevance"):
         conn.close()
         fail("search result number is outside the result list")
     source, entry_type, _logical, _mtime_ns, location, entry_path, container_id, container_name, _status, _scanned_at = rows[number - 1]
+    if source == "host":
+        entry_path = filesystem_path_text(entry_path)
     output = sys.stdout.buffer
     for value in (source, container_id, container_name or location, entry_type, entry_path):
         output.write(value.encode("utf-8", "surrogateescape") + b"\0")
@@ -1147,7 +1149,7 @@ def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="rel
         sql += " AND entries.root_id=?"
         args.append(root_id)
     if path_prefix:
-        path_prefix = os.path.realpath(path_prefix)
+        path_prefix = database_path_text(os.path.realpath(path_prefix))
         if path_prefix == "/":
             # The normal descendant expression appends '/', which would turn the root prefix
             # into '//' and exclude every absolute path.
@@ -1210,7 +1212,8 @@ def cmd_search_path(path, words, root, number, path_prefix=None, order="relevanc
     rows, _, _ = search_rows(conn, words, root, number, 0, path_prefix, order)
     if len(rows) < number:
         fail("search result number is outside the result list")
-    print(rows[number - 1][3])
+    sys.stdout.buffer.write(filesystem_path_text(rows[number - 1][3]).encode("utf-8", "surrogateescape"))
+    sys.stdout.buffer.write(b"\n")
     conn.close()
 
 
@@ -1244,6 +1247,42 @@ def format_duration(seconds):
     return f"{seconds}s"
 
 
+def database_path_text(value):
+    """Store filesystem names as SQLite-safe text without losing surrogateescaped bytes.
+
+    Linux filenames are bytes, not necessarily UTF-8. Python represents an invalid UTF-8 byte
+    as a low surrogate; sqlite3 refuses those characters.  Escape only those bytes (and the
+    escape marker itself) so ordinary paths remain readable and a selected result can be restored
+    to its exact original filesystem name.
+    """
+    escaped = []
+    for character in value:
+        codepoint = ord(character)
+        if character == "~":
+            escaped.append("~~")
+        elif 0xDC80 <= codepoint <= 0xDCFF:
+            escaped.append(f"~{codepoint - 0xDC00:02X}")
+        else:
+            escaped.append(character)
+    return "".join(escaped)
+
+
+def filesystem_path_text(value):
+    """Turn a database path back into Python's exact filesystem string."""
+    restored = []
+    index = 0
+    while index < len(value):
+        if value[index] != "~" or index + 1 >= len(value):
+            restored.append(value[index]); index += 1; continue
+        if value[index + 1] == "~":
+            restored.append("~"); index += 2; continue
+        encoded_byte = value[index + 1:index + 3]
+        if len(encoded_byte) == 2 and all(character in "0123456789abcdefABCDEF" for character in encoded_byte):
+            restored.append(chr(0xDC00 + int(encoded_byte, 16))); index += 3; continue
+        restored.append("~"); index += 1
+    return "".join(restored)
+
+
 def entry_values(root_id, scan_id, path, info):
     mode = info.st_mode
     if stat.S_ISDIR(mode):
@@ -1254,7 +1293,7 @@ def entry_values(root_id, scan_id, path, info):
         kind = "file"
     else:
         kind = "other"
-    return (root_id, path, os.path.basename(path), info.st_dev, info.st_ino, kind, info.st_size,
+    return (root_id, database_path_text(path), database_path_text(os.path.basename(path)), info.st_dev, info.st_ino, kind, info.st_size,
             getattr(info, "st_blocks", 0) * 512, info.st_mtime_ns, info.st_ctime_ns, scan_id)
 
 
@@ -1371,7 +1410,7 @@ def cmd_scan(path, target, context):
             rows = []
 
     def onerror(exc):
-        errors.append((run_id, getattr(exc, "filename", target) or target, "walk", str(exc)))
+        errors.append((run_id, database_path_text(getattr(exc, "filename", target) or target), "walk", database_path_text(str(exc))))
 
     rows.append(entry_values(root_id, run_id, target, target_info))
     visited = 1
@@ -1382,7 +1421,7 @@ def cmd_scan(path, target, context):
             try:
                 info = os.lstat(candidate)
             except OSError as exc:
-                errors.append((run_id, candidate, "lstat", str(exc))); continue
+                errors.append((run_id, database_path_text(candidate), "lstat", database_path_text(str(exc)))); continue
             if info.st_dev != target_info.st_dev:
                 continue
             rows.append(entry_values(root_id, run_id, candidate, info))
@@ -1395,7 +1434,7 @@ def cmd_scan(path, target, context):
             try:
                 info = os.lstat(candidate)
             except OSError as exc:
-                errors.append((run_id, candidate, "lstat", str(exc))); continue
+                errors.append((run_id, database_path_text(candidate), "lstat", database_path_text(str(exc)))); continue
             if info.st_dev != target_info.st_dev:
                 continue
             rows.append(entry_values(root_id, run_id, candidate, info))
