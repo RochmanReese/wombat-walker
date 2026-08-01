@@ -2221,8 +2221,8 @@ walk_filesystem() {
         else
             first_action="[!] Open shell in this folder"
         fi
-        printf "  %-31s%-12s%-25s%-25s%s\n" "$first_action" "[u] Up" "[d] Down one folder" "[x] Management Utilities" "[?] Help"
-        printf "  %-31s%-31s%-31s%s\n" "[o] Change display order" "[s] Search folders & files" "[g] Manage current folder" "[q] Quit"
+        printf "  %-31s %-31s %-29s %s\n" "$first_action" "[u] Up [d] Down one folder" "[x] Management Utilities" "[?] Help"
+        printf "  %-31s %-31s %-29s %s\n" "[o] Change display order" "[s] Search folders & files" "[g] Manage current folder" "[q] Quit"
         echo
         if [ -n "$notice" ]; then
             echo "  $notice"
