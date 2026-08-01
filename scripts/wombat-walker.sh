@@ -1964,12 +1964,12 @@ fi
 walk_filesystem() {
     local current child choice manual_path index item_name display_name total_entries page page_size start_index end_index i
     local -a all_entries
-    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display owner_display record sort_choice target metric epoch history_index entry_kind sparse_info
+    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display owner_display record sort_choice target metric epoch history_index entry_kind sparse_info total_delta mismatch_threshold
     local cache_current cache_status cache_stale cache_total cache_path cache_size cache_allocated cache_index notice encryption_choice
     local search_words search_result_number cached_path managed_folder
     local disk_size_bytes disk_used_bytes disk_avail_bytes disk_percent disk_physical_display disk_capacity_display disk_available_display
     local -a directories files entries visible_entries sort_records back_history encryption_label_paths encryption_label_scopes encryption_fields
-    local -A size_cache size_bytes_cache allocated_bytes_cache on_disk_cache folder_total_cache modified_cache owner_cache cached_folder_checked cached_folder_status
+    local -A size_cache size_bytes_cache allocated_bytes_cache on_disk_cache folder_total_cache cached_folder_total_bytes modified_cache owner_cache cached_folder_checked cached_folder_status
 
     load_cached_sizes() {
         local -a cache_fields
@@ -1980,9 +1980,16 @@ walk_filesystem() {
         [ "${cache_fields[0]:-}" = "META" ] || return 0
         cache_status="${cache_fields[2]}"; cache_stale="${cache_fields[3]}"; cache_total="${cache_fields[4]}"
         [[ "$cache_total" =~ ^[0-9]+$ ]] || return 0
-        folder_total_cache["$current"]="$(human_bytes "$cache_total")"
+        cached_folder_total_bytes["$current"]="$cache_total"
         cached_folder_status["$current"]="$cache_status"
-        [ "$cache_stale" = "1" ] && cached_folder_status["$current"]="Cached total — [v] refresh"
+        if [ "$cache_stale" = "1" ]; then
+            # A targeted refresh invalidates the saved root total. Do not
+            # present that stale number as the current folder's total;
+            # the main loop will calculate a live value instead.
+            cached_folder_status["$current"]="Saved scan stale"
+        else
+            folder_total_cache["$current"]="$(human_bytes "$cache_total")"
+        fi
         for ((cache_index=6; cache_index<${#cache_fields[@]}; cache_index+=4)); do
             [ "${cache_fields[$cache_index]}" = "SIZE" ] || continue
             cache_path="${cache_fields[$((cache_index + 1))]}"; cache_size="${cache_fields[$((cache_index + 2))]}"; cache_allocated="${cache_fields[$((cache_index + 3))]}"
@@ -2094,7 +2101,7 @@ walk_filesystem() {
     while true; do
         if [ -n "${FILE_MANAGEMENT_RESULT:-}" ]; then
             size_cache=(); size_bytes_cache=(); allocated_bytes_cache=(); on_disk_cache=()
-            folder_total_cache=(); modified_cache=(); cached_folder_checked=(); cached_folder_status=()
+            folder_total_cache=(); cached_folder_total_bytes=(); modified_cache=(); cached_folder_checked=(); cached_folder_status=()
             notice="${FILE_MANAGEMENT_RESULT^} completed: ${FILE_MANAGEMENT_DESTINATION:-current folder}. Live listing refreshed."
             FILE_MANAGEMENT_RESULT=""
         fi
@@ -2142,6 +2149,18 @@ walk_filesystem() {
                 folder_total_cache["$current"]="$(human_bytes "$folder_total_bytes")"
             fi
             [ -n "$folder_total_display" ] || folder_total_display="${folder_total_cache[$current]}"
+        fi
+
+        if [ "${cached_folder_status[$current]:-}" = "Saved scan stale" ] \
+            && [[ "${cached_folder_total_bytes[$current]:-}" =~ ^[0-9]+$ ]] \
+            && [[ "$folder_total_bytes" =~ ^[0-9]+$ ]]; then
+            total_delta=$((folder_total_bytes - cached_folder_total_bytes[$current]))
+            [ "$total_delta" -lt 0 ] && total_delta=$((-total_delta))
+            mismatch_threshold=$((cached_folder_total_bytes[$current] / 100))
+            [ "$mismatch_threshold" -lt 1048576 ] && mismatch_threshold=1048576
+            if [ "$total_delta" -ge "$mismatch_threshold" ]; then
+                notice="${notice:+$notice }Saved scan mismatch: live $folder_total_display vs saved $(human_bytes "${cached_folder_total_bytes[$current]}")."
+            fi
         fi
 
         # df reports unique allocated filesystem blocks. Unlike the logical file-size total above,
@@ -2198,18 +2217,16 @@ walk_filesystem() {
         fi
         echo
         if [ -n "$folder_total_display" ]; then
-            if [ -n "${cached_folder_status[$current]:-}" ]; then
-                if [ "${cached_folder_status[$current]}" = "Cached total — [v] refresh" ]; then
-                    echo "  Cached total: $folder_total_display — [v] refresh"
-                else
-                    echo "  Cached logical file-size estimate (current folder): $folder_total_display (${cached_folder_status[$current]})"
-                fi
+            if [ "${cached_folder_status[$current]:-}" = "Saved scan stale" ]; then
+                echo "  Live file data: $folder_total_display — saved index stale; [v] refresh"
+            elif [ -n "${cached_folder_status[$current]:-}" ]; then
+                echo "  Saved file data: $folder_total_display (${cached_folder_status[$current]})"
             else
-                echo "  Logical file-size estimate (current folder): $folder_total_display"
+                echo "  Live file data: $folder_total_display"
             fi
         fi
         echo
-        echo "  Physical disk use (this filesystem): $disk_physical_display of $disk_capacity_display ($disk_percent used, $disk_available_display free)"
+        echo "  Physical disk use (disk space): $disk_physical_display of $disk_capacity_display ($disk_percent used, $disk_available_display free)"
         if [[ "${DOCKER_STORAGE_BYTES:-}" =~ ^[0-9]+$ ]]; then
             docker_percent="$(awk -v docker_bytes="$DOCKER_STORAGE_BYTES" -v disk_bytes="$disk_size_bytes" 'BEGIN { printf "%.0f", (docker_bytes / disk_bytes) * 100 }')"
             echo "  Docker storage (images, containers, volumes, build cache): $DOCKER_STORAGE_DISPLAY (${docker_percent}% of this filesystem)"
@@ -2310,7 +2327,7 @@ walk_filesystem() {
                         case "$refresh_choice" in
                             y|Y|yes|YES)
                                 python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$current" little || echo "❌ Refresh failed."
-                                size_cache=(); size_bytes_cache=(); folder_total_cache=(); modified_cache=(); cached_folder_checked=(); cached_folder_status=(); page=0
+                                size_cache=(); size_bytes_cache=(); folder_total_cache=(); cached_folder_total_bytes=(); modified_cache=(); cached_folder_checked=(); cached_folder_status=(); page=0
                                 ;;
                             *) echo "Refresh cancelled." ;;
                         esac
