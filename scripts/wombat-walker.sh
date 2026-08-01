@@ -1964,7 +1964,7 @@ fi
 walk_filesystem() {
     local current child choice manual_path index item_name display_name total_entries page page_size start_index end_index i
     local -a all_entries
-    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display owner_display record sort_choice target metric epoch history_index entry_kind sparse_info total_delta mismatch_threshold
+    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes visible_folder_total_bytes hidden_folder_total_bytes folder_total_display hidden_folder_total_display modified_display owner_display record sort_choice target metric epoch history_index entry_kind sparse_info total_delta mismatch_threshold
     local cache_current cache_status cache_stale cache_total cache_path cache_size cache_allocated cache_index notice encryption_choice
     local search_words search_result_number cached_path managed_folder
     local disk_size_bytes disk_used_bytes disk_avail_bytes disk_percent disk_physical_display disk_capacity_display disk_available_display
@@ -2138,7 +2138,7 @@ walk_filesystem() {
             echo "  Calculating sizes..."
         fi
         if $size_needed; then for child in "${entries[@]}"; do [ -n "${size_cache[$child]:-}" ] || measure_item "$child"; done; fi
-        folder_total_display=""
+        folder_total_display=""; hidden_folder_total_display=""
         if [ "$SHOW_FILE_SIZES" = "on" ]; then
             if [ ! -r "$current" ] || [ ! -x "$current" ]; then
                 folder_total_display="unavailable (protected)"
@@ -2147,6 +2147,13 @@ walk_filesystem() {
                 folder_total_bytes="$(find -P "$current" -xdev -type f -printf '%s\n' 2>/dev/null | awk '{ total += $1 } END { printf "%.0f", total }')"
                 [[ "$folder_total_bytes" =~ ^[0-9]+$ ]] || folder_total_bytes="0"
                 folder_total_cache["$current"]="$(human_bytes "$folder_total_bytes")"
+                if [ "$SHOW_HIDDEN" = "off" ]; then
+                    visible_folder_total_bytes="$(find -P "$current" -xdev \( -path "$current/.*" -prune \) -o \( -type f -printf '%s\n' \) 2>/dev/null | awk '{ total += $1 } END { printf "%.0f", total }')"
+                    [[ "$visible_folder_total_bytes" =~ ^[0-9]+$ ]] || visible_folder_total_bytes="0"
+                    hidden_folder_total_bytes=$((folder_total_bytes - visible_folder_total_bytes))
+                    [ "$hidden_folder_total_bytes" -lt 0 ] && hidden_folder_total_bytes=0
+                    hidden_folder_total_display="$(human_bytes "$hidden_folder_total_bytes")"
+                fi
             fi
             [ -n "$folder_total_display" ] || folder_total_display="${folder_total_cache[$current]}"
         fi
@@ -2218,11 +2225,14 @@ walk_filesystem() {
         echo
         if [ -n "$folder_total_display" ]; then
             if [ "${cached_folder_status[$current]:-}" = "Saved scan stale" ]; then
-                echo "  Live file data: $folder_total_display — saved index stale; [v] refresh"
+                echo "  Live file data (including hidden): $folder_total_display — saved index stale; [v] refresh"
             elif [ -n "${cached_folder_status[$current]:-}" ]; then
-                echo "  Saved file data: $folder_total_display (${cached_folder_status[$current]})"
+                echo "  Saved file data (including hidden): $folder_total_display (${cached_folder_status[$current]})"
             else
-                echo "  Live file data: $folder_total_display"
+                echo "  Live file data (including hidden): $folder_total_display"
+            fi
+            if [ -n "$hidden_folder_total_display" ]; then
+                echo "  Hidden file data included: $hidden_folder_total_display"
             fi
         fi
         echo
