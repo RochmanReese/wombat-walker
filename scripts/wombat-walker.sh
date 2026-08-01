@@ -1333,15 +1333,15 @@ docker_container_management_menu() {
             echo "  No Docker containers were found."
             return 0
         fi
-        printf "  %-5s%-25s%-20s%-28s%-12s\n" "No." "Container" "Status" "Image" "Safety"
+        printf "  %-5s%-25s%-23s%-25s%-12s\n" "No." "Container" "Status" "Image" "Safety"
         docker_choice=1
         for docker_line in "${docker_lines[@]}"; do
             IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "$docker_line"
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
             [ "${#docker_name}" -le 24 ] || docker_name="${docker_name:0:21}..."
-            [ "${#docker_status}" -le 19 ] || docker_status="${docker_status:0:16}..."
-            [ "${#docker_image}" -le 27 ] || docker_image="${docker_image:0:24}..."
-            printf "  %-5s%-25s%-20s%-28s%-12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
+            [ "${#docker_status}" -le 22 ] || docker_status="${docker_status:0:19}..."
+            [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
+            printf "  %-5s%-25s%-23s%-25s%-12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
             docker_choice=$((docker_choice + 1))
         done
         echo
