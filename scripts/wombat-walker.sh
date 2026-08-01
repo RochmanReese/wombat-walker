@@ -2353,7 +2353,8 @@ walk_filesystem() {
                 page=0
                 ;;
             m|M)
-                read -r -e -p "Path: " manual_path
+                read -r -e -p "Enter absolute path (start with /, e.g. /home/wombat; q to cancel): " manual_path
+                case "$manual_path" in q|Q|"") notice="Path entry cancelled."; continue ;; esac
                 [ -e "$manual_path" ] || { echo "❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."; continue; }
                 if [ -d "$manual_path" ]; then
                     back_history+=("$current"); current="$(realpath "$manual_path")"; page=0
