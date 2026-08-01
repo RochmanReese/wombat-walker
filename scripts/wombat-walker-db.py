@@ -540,6 +540,21 @@ def cmd_list_mounts(_path):
             yield node
             yield from flatten(node.get("children", []))
 
+    def filesystem_usage(target):
+        """Return live df figures for one mounted filesystem without failing the mount list."""
+        try:
+            result = subprocess.run(
+                ["df", "-B1", "--output=size,used,avail,pcent", target],
+                check=True, capture_output=True, text=True,
+            )
+            fields = result.stdout.splitlines()[-1].split()
+            if len(fields) != 4:
+                return None
+            total, used, available = (int(fields[0]), int(fields[1]), int(fields[2]))
+            return total, used, available, fields[3]
+        except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+            return None
+
     # `findmnt --json` represents nested mount points as children.  Keep only a
     # filesystem's real root, which removes bind mounts such as /tmp and the
     # repository sandbox while retaining genuine disks and network mounts.
@@ -547,7 +562,15 @@ def cmd_list_mounts(_path):
     print(f"{'Mount path':<40}  {'Device/source':<20}  {'Type':<8}  {'UUID':<37}  Label")
     print("=" * 132)
     for mount in mounts:
-        print(f"{clipped(mount.get('target'), 40):<40}  {clipped(mount.get('source'), 20):<20}  {clipped(mount.get('fstype'), 8):<8}  {clipped(mount.get('uuid'), 37):<37}  {mount.get('label') or '-'}")
+        target = mount.get("target")
+        print(f"{clipped(target, 40):<40}  {clipped(mount.get('source'), 20):<20}  {clipped(mount.get('fstype'), 8):<8}  {clipped(mount.get('uuid'), 37):<37}  {mount.get('label') or '-'}")
+        usage = filesystem_usage(target)
+        if usage:
+            total, used, available, percent = usage
+            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent}")
+        else:
+            print("Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable")
+        print()
 
 
 def docker_size_bytes(value):
