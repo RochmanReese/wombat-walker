@@ -1369,8 +1369,8 @@ docker_container_management_menu() {
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
             echo
             printf '%*s\n' 114 '' | tr ' ' '='
-            echo "Container:  $docker_name  $docker_id"
-            printf "Id: %-12s    Status: %-23s  Image: %-34s  Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
+            echo "Container:  $docker_name"
+            printf "Id: %-12s    Status: %-23s  Image: %-34s Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
             printf '%*s\n' 114 '' | tr ' ' '='
             echo
             echo "  [1] Start container"
