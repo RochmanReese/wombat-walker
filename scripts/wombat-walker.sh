@@ -1291,7 +1291,7 @@ docker_workspace() {
             printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
         fi
         printf '%*s\n' 114 '' | tr ' ' '='
-        printf "  %-5s%-22s%-18s%-25s %12s  %12s %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
+        printf "  %-5s%-22s%-18s%-25s %12s  %12s %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" " Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
         fi
