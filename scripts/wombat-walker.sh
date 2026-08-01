@@ -1223,8 +1223,157 @@ docker_scan_all_running() {
     [ "$failures" -eq 0 ] || echo "Failures: $failures. Search results remain available for successfully scanned containers."
 }
 
+DOCKER_LOCKS_FILE="${WOMBAT_WALKER_DOCKER_LOCKS:-$HOME/.local/state/wombat-walker/docker-locks}"
+
+docker_lock_state() {
+    local docker_id="$1" docker_status="$2" saved_state
+    saved_state="$(awk -F '\t' -v id="$docker_id" '$1 == id { print $2; exit }' "$DOCKER_LOCKS_FILE" 2>/dev/null || true)"
+    if [ "$saved_state" = "locked" ] || [ "$saved_state" = "unlocked" ]; then
+        printf '%s' "$saved_state"
+    elif [[ "$docker_status" == Up* ]]; then
+        printf 'unlocked'
+    else
+        printf 'locked'
+    fi
+}
+
+docker_set_lock_state() {
+    local docker_id="$1" new_state="$2" lock_dir temp_file
+    lock_dir="$(dirname "$DOCKER_LOCKS_FILE")"
+    mkdir -p "$lock_dir" 2>/dev/null || return 1
+    temp_file="$(mktemp "${DOCKER_LOCKS_FILE}.XXXXXX")" || return 1
+    awk -F '\t' -v id="$docker_id" '$1 != id { print }' "$DOCKER_LOCKS_FILE" 2>/dev/null > "$temp_file" || true
+    printf '%s\t%s\n' "$docker_id" "$new_state" >> "$temp_file"
+    chmod 600 "$temp_file" 2>/dev/null || true
+    mv -f -- "$temp_file" "$DOCKER_LOCKS_FILE"
+}
+
+docker_purge_unlocked_stopped() {
+    local docker_line docker_id docker_name docker_status docker_image docker_size docker_state confirmation removed=0 locked=0
+    local -a purge_lines purge_ids purge_names
+    mapfile -t purge_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
+    purge_ids=(); purge_names=()
+    for docker_line in "${purge_lines[@]}"; do
+        IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "$docker_line"
+        [[ "$docker_status" == Up* ]] && continue
+        docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+        if [ "$docker_state" = "locked" ]; then
+            locked=$((locked + 1))
+        else
+            purge_ids+=("$docker_id"); purge_names+=("$docker_name")
+        fi
+    done
+    if [ "${#purge_ids[@]}" -eq 0 ]; then
+        echo "No unlocked stopped containers are available for removal. Locked containers skipped: $locked."
+        return 0
+    fi
+    echo "The following unlocked stopped containers will be removed:"
+    printf '  %s\n' "${purge_names[@]}"
+    echo "Images and named volumes will not be removed."
+    read -r -e -p "Type PURGE to confirm: " confirmation
+    [ "$confirmation" = "PURGE" ] || { echo "Purge cancelled."; return 0; }
+    for docker_id in "${purge_ids[@]}"; do
+        if docker rm "$docker_id" >/dev/null 2>&1; then removed=$((removed + 1)); fi
+    done
+    echo "Removed $removed stopped container(s). Locked containers skipped: $locked."
+}
+
+docker_container_management_menu() {
+    local docker_choice docker_line docker_id docker_name docker_status docker_image docker_size docker_state confirmation
+    local -a docker_lines
+    while true; do
+        mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
+        echo
+        echo "================ Docker container management ================"
+        if [ "${#docker_lines[@]}" -eq 0 ]; then
+            echo "  No Docker containers were found."
+            return 0
+        fi
+        printf "  %-5s%-25s%-20s%-28s%-12s\n" "No." "Container" "Status" "Image" "Safety"
+        docker_choice=1
+        for docker_line in "${docker_lines[@]}"; do
+            IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "$docker_line"
+            docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+            [ "${#docker_name}" -le 24 ] || docker_name="${docker_name:0:21}..."
+            [ "${#docker_status}" -le 19 ] || docker_status="${docker_status:0:16}..."
+            [ "${#docker_image}" -le 27 ] || docker_image="${docker_image:0:24}..."
+            printf "  %-5s%-25s%-20s%-28s%-12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
+            docker_choice=$((docker_choice + 1))
+        done
+        echo
+        echo "  Stopped containers are locked by default. Unlock one before removing it."
+        echo "  Removing a container does not remove its images or named volumes."
+        echo
+        echo "  [q] Return to Docker list"
+        read -r -e -p "> " docker_choice
+        case "$docker_choice" in
+            q|Q|"") return 0 ;;
+        esac
+        if ! [[ "$docker_choice" =~ ^[0-9]+$ ]] || [ "$docker_choice" -lt 1 ] || [ "$docker_choice" -gt "${#docker_lines[@]}" ]; then
+            echo "❌ Enter a listed container number or q."
+            continue
+        fi
+        IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "${docker_lines[$((docker_choice - 1))]}"
+        while true; do
+            docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+            echo
+            echo "Container: $docker_name"
+            echo "Status: $docker_status    Safety: $docker_state"
+            echo
+            echo "  [1] Start container"
+            echo "  [2] Stop container"
+            echo "  [3] Remove container"
+            if [ "$docker_state" = "locked" ]; then
+            echo "  [4] Unlock container"
+            else
+                echo "  [4] Lock container"
+            fi
+            echo "  [5] View mounts and persistent data"
+            echo "  [6] Purge unlocked stopped containers"
+            echo "  [b] Back to container list"
+            read -r -e -p "> " confirmation
+            case "$confirmation" in
+                b|B|q|Q|"") break ;;
+                1)
+                    if docker start "$docker_id" >/dev/null 2>&1; then docker_status="Up"; echo "Container started: $docker_name"; else echo "❌ Could not start $docker_name."; fi
+                    ;;
+                2)
+                    if docker stop "$docker_id" >/dev/null 2>&1; then docker_status="Exited"; docker_set_lock_state "$docker_id" locked || true; echo "Container stopped and locked: $docker_name"; else echo "❌ Could not stop $docker_name."; fi
+                    ;;
+                3)
+                    docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+                    if [ "$docker_state" = "locked" ]; then
+                        echo "❌ Container is locked. Unlock it before removal."
+                    else
+                        echo "This removes the container only. Its images and named volumes remain."
+                        read -r -e -p "Type the container name to confirm removal ($docker_name): " confirmation
+                        if [ "$confirmation" = "$docker_name" ] && docker rm "$docker_id" >/dev/null 2>&1; then
+                            echo "Container removed: $docker_name"
+                            break
+                        else
+                            echo "❌ Removal cancelled or failed."
+                        fi
+                    fi
+                    ;;
+                4)
+                    docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+                    if [ "$docker_state" = "locked" ]; then
+                        read -r -e -p "Type the container name to unlock ($docker_name): " confirmation
+                        [ "$confirmation" = "$docker_name" ] && docker_set_lock_state "$docker_id" unlocked && echo "Container unlocked: $docker_name" || echo "❌ Unlock cancelled."
+                    else
+                        docker_set_lock_state "$docker_id" locked && echo "Container locked: $docker_name"
+                    fi
+                    ;;
+                5) docker_show_mounts "$docker_id" ;;
+                6) docker_purge_unlocked_stopped; break ;;
+                *) echo "❌ Choose 1, 2, 3, 4, 5, 6, b, or q." ;;
+            esac
+        done
+    done
+}
+
 docker_workspace() {
-    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count
+    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count
     local -a docker_lines docker_ids docker_names docker_records
     declare -A docker_persistent_sizes=()
     if ! docker info >/dev/null 2>&1; then
@@ -1244,10 +1393,11 @@ docker_workspace() {
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
         docker_ids=(); docker_names=()
         docker_records=()
-        docker_container_count="${#docker_lines[@]}"; docker_running_count=0; docker_exited_count=0
+        docker_container_count="${#docker_lines[@]}"; docker_running_count=0; docker_exited_count=0; docker_locked_count=0
         for docker_line in "${docker_lines[@]}"; do
             IFS=$'\t' read -r docker_container docker_name docker_status docker_image docker_size <<< "$docker_line"
             if [[ "$docker_status" == Up* ]]; then docker_running_count=$((docker_running_count + 1)); else docker_exited_count=$((docker_exited_count + 1)); fi
+            [ "$(docker_lock_state "$docker_container" "$docker_status")" = "locked" ] && docker_locked_count=$((docker_locked_count + 1))
             docker_writable="$docker_size"; docker_virtual="-"
             if [[ "$docker_size" =~ ^(.+)[[:space:]]+\(virtual[[:space:]]+(.+)\)$ ]]; then
                 docker_writable="${BASH_REMATCH[1]}"; docker_virtual="${BASH_REMATCH[2]}"
@@ -1283,7 +1433,7 @@ docker_workspace() {
         echo
         printf '%*s\n' 114 '' | tr ' ' '='
         echo "Wombat Walker — Docker filesystem explorer"
-        echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count"
+        echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count    Locked :$docker_locked_count"
         if docker_desktop_disk_summary; then
             echo
             printf "%-74s  Order: %s\n" "Unused virtual capacity does not currently consume host disk space." "$DOCKER_SORT_ORDER"
@@ -1322,6 +1472,7 @@ docker_workspace() {
         case "$docker_choice" in
             q|Q|"") return 0 ;;
             h|H|\?) docker_help_screen; read -r -e -p "Press Enter to return to Docker containers. " _ ;;
+            k|K) docker_container_management_menu ;;
             r|R) ;;
             d|D)
                 echo "Calculating writable named-volume and bind-mount data for running containers..."
