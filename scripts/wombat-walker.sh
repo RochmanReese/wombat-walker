@@ -2366,7 +2366,7 @@ walk_filesystem() {
                 ;;
             s|S)
                 search_combined="off"
-                read -r -e -p "Search saved paths: " search_words
+                read -r -e -p "Enter search words: " search_words
                 [ -n "$search_words" ] || { echo "❌ Enter one or more search words."; continue; }
                 echo "Refreshing Walker's saved search index below: $current"
                 if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$current" little; then
