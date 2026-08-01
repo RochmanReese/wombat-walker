@@ -1660,7 +1660,7 @@ docker_workspace() {
             printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
         fi
         printf '%*s\n' 114 '' | tr ' ' '='
-        printf "  %-5s%-13s%-20s%-17s%-26s %6s %10s %12s\n" "No." "ID" "Container" "Status" "Image" "Layer" "Size" "Persistent"
+        printf "  %-5s%-13s%-20s%-17s%-26s %5s%10s %12s\n" "No." "ID" "Container" "Status" "Image" "Layer" "Size" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
         fi
@@ -1679,7 +1679,7 @@ docker_workspace() {
             [ "${#docker_name}" -le 19 ] || docker_name="${docker_name:0:16}..."
             [ "${#docker_status}" -le 16 ] || docker_status="${docker_status:0:13}..."
             [ "${#docker_image}" -le 25 ] || docker_image="${docker_image:0:22}..."
-            printf "  %-5s%-13s%-20s%-17s%-26s %6s %10s %12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
+            printf "  %-5s%-13s%-20s%-17s%-26s %5s%10s %12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
             docker_choice=$((docker_choice + 1))
         done
         printf '%*s\n' 114 '' | tr ' ' '='
