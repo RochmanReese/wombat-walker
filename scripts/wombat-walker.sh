@@ -1964,12 +1964,12 @@ fi
 walk_filesystem() {
     local current child choice manual_path index item_name display_name total_entries page page_size start_index end_index i
     local -a all_entries
-    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display record sort_choice target metric epoch history_index entry_kind sparse_info
+    local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display owner_display record sort_choice target metric epoch history_index entry_kind sparse_info
     local cache_current cache_status cache_stale cache_total cache_path cache_size cache_allocated cache_index notice encryption_choice
     local search_words search_result_number cached_path managed_folder
     local disk_size_bytes disk_used_bytes disk_avail_bytes disk_percent disk_physical_display disk_capacity_display disk_available_display
     local -a directories files entries visible_entries sort_records back_history encryption_label_paths encryption_label_scopes encryption_fields
-    local -A size_cache size_bytes_cache allocated_bytes_cache on_disk_cache folder_total_cache modified_cache cached_folder_checked cached_folder_status
+    local -A size_cache size_bytes_cache allocated_bytes_cache on_disk_cache folder_total_cache modified_cache owner_cache cached_folder_checked cached_folder_status
 
     load_cached_sizes() {
         local -a cache_fields
@@ -2050,6 +2050,14 @@ walk_filesystem() {
         else
             BROWSER_MODIFIED_EPOCH="$(stat -c '%Y' -- "$target" 2>/dev/null || echo 0)"
         fi
+    }
+
+    file_owner() {
+        target="$1"
+        if [ -z "${owner_cache[$target]:-}" ]; then
+            owner_cache["$target"]="$(stat -c '%U:%G' -- "$target" 2>/dev/null || echo unknown)"
+        fi
+        OWNER_DISPLAY="${owner_cache[$target]}"
     }
 
     sort_entries() {
@@ -2160,7 +2168,7 @@ walk_filesystem() {
             echo "  Use --deep-scan current|filesystem --sudo for an explicit protected inventory."
             echo
         fi
-        printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Info" "Last updated"
+        printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
         index=1
         for child in "${entries[@]}"; do
             item_name="$(basename "$child")"; display_name="$item_name"
@@ -2173,13 +2181,13 @@ walk_filesystem() {
             fi
             is_encryption_labelled "$child" && entry_kind="$entry_kind enc"
             [ "${#display_name}" -le 32 ] || display_name="${display_name:0:29}..."
-            modified_time "$child"; modified_display="${modified_cache[$child]}"
+            modified_time "$child"; modified_display="${modified_cache[$child]}"; file_owner "$child"; owner_display="$OWNER_DISPLAY"
             sparse_info=""
             if [[ "$entry_kind" == file* ]] && [[ "${size_bytes_cache[$child]:-}" =~ ^[0-9]+$ ]] && [[ "${allocated_bytes_cache[$child]:-}" =~ ^[0-9]+$ ]] \
                 && [ "${size_bytes_cache[$child]}" -gt 0 ] && [ "$(( ${allocated_bytes_cache[$child]} * 100 ))" -lt "${size_bytes_cache[$child]}" ]; then
                 sparse_info="sparse"
             fi
-            printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "[$index]" "$entry_kind" "$display_name" "${size_cache[$child]:-}" "${on_disk_cache[$child]:-}" "$sparse_info" "$modified_display"
+            printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "[$index]" "$entry_kind" "$display_name" "${size_cache[$child]:-}" "${on_disk_cache[$child]:-}" "$owner_display" "$modified_display"
             index=$((index + 1))
         done
         if [ "$total_entries" -gt "$page_size" ]; then
@@ -2464,14 +2472,14 @@ walk_filesystem() {
                             echo "Choose a folder to search in: $current"
                             echo "Order: $SORT_ORDER    Items per page: $page_size    Hidden: $SHOW_HIDDEN"
                             echo "=================================================================================================="
-                            printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Info" "Last updated"
+                            printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
                             for ((search_folder_index=search_folder_picker_start; search_folder_index<search_folder_picker_end; search_folder_index++)); do
                                 search_folder_candidate="${search_folder_picker_entries[$search_folder_index]}"
                                 search_folder_name="$(basename "$search_folder_candidate")"
                                 if [ -d "$search_folder_candidate" ] && [ ! -L "$search_folder_candidate" ]; then search_folder_kind="dir"; else search_folder_kind="file"; fi
                                 [ "${#search_folder_name}" -le 32 ] || search_folder_name="${search_folder_name:0:29}..."
-                                measure_item "$search_folder_candidate"; modified_time "$search_folder_candidate"
-                                printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "[$((search_folder_index + 1))]" "$search_folder_kind" "$search_folder_name" "${size_cache[$search_folder_candidate]:-}" "${on_disk_cache[$search_folder_candidate]:-}" "" "${modified_cache[$search_folder_candidate]:-}"
+                                measure_item "$search_folder_candidate"; modified_time "$search_folder_candidate"; file_owner "$search_folder_candidate"
+                                printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "[$((search_folder_index + 1))]" "$search_folder_kind" "$search_folder_name" "${size_cache[$search_folder_candidate]:-}" "${on_disk_cache[$search_folder_candidate]:-}" "$OWNER_DISPLAY" "${modified_cache[$search_folder_candidate]:-}"
                             done
                             echo
                             [ "$search_folder_picker_end" -lt "$search_folder_picker_total" ] && printf "  %-34s" "[n] Next page"
