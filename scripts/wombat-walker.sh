@@ -2383,8 +2383,13 @@ walk_filesystem() {
                 page=0
                 ;;
             m|M)
-                read -r -e -p "Enter absolute path (start with /, e.g. /home/wombat; q to cancel): " manual_path
+                read -r -e -p "Enter path (/home/wombat or ~/ for home; q to cancel): " manual_path
                 case "$manual_path" in q|Q|"") notice="Path entry cancelled."; continue ;; esac
+                if [ "$manual_path" = "~" ]; then
+                    manual_path="$HOME"
+                elif [[ "$manual_path" == "~/"* ]]; then
+                    manual_path="$HOME/${manual_path#~/}"
+                fi
                 if [ ! -e "$manual_path" ]; then
                     notice="❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."
                     continue
