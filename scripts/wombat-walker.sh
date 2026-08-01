@@ -2355,16 +2355,18 @@ walk_filesystem() {
             m|M)
                 read -r -e -p "Enter absolute path (start with /, e.g. /home/wombat; q to cancel): " manual_path
                 case "$manual_path" in q|Q|"") notice="Path entry cancelled."; continue ;; esac
-                [ -e "$manual_path" ] || { echo "❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."; continue; }
+                if [ ! -e "$manual_path" ]; then
+                    notice="❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."
+                    continue
+                fi
                 if [ -d "$manual_path" ]; then
                     back_history+=("$current"); current="$(realpath "$manual_path")"; page=0
                 elif [ -f "$manual_path" ] && [ ! -L "$manual_path" ]; then
                     file_action_menu "$(realpath "$manual_path")"
                 elif [ -L "$manual_path" ]; then
-                    echo "❌ Cannot edit this selection: it is a symbolic link."
-                    echo "  Resolve or manage symbolic links outside Wombat Walker."
+                    notice="❌ Cannot edit this selection: it is a symbolic link. Resolve or manage symbolic links outside Wombat Walker."
                 else
-                    echo "❌ This is not a regular file. Manage folders, devices, and special files outside Wombat Walker."
+                    notice="❌ This is not a regular file. Manage folders, devices, and special files outside Wombat Walker."
                 fi
                 ;;
             s|S)
@@ -2638,7 +2640,7 @@ walk_filesystem() {
                         echo "❌ This selection is not an ordinary regular file. Manage it outside Wombat Walker."
                     fi
                 else
-                    echo "❌ Enter a listed number, ., u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
+                    notice="❌ Enter a listed number, ., u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
                 fi
                 ;;
         esac
