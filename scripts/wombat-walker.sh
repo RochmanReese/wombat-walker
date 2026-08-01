@@ -1421,17 +1421,21 @@ docker_container_management_menu() {
                     fi
                     ;;
                 3)
-                    docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
-                    if [ "$docker_state" = "locked" ]; then
-                        docker_notice="❌ Container is locked. Unlock it before removal."
+                    if [[ "$docker_status" == Up* ]]; then
+                        docker_notice="❌ This container is running. Stop it first before removing it."
                     else
-                        echo "This removes the container only. Its images and named volumes remain."
-                        read -r -e -p "Type the container name to confirm removal ($docker_name): " confirmation
-                        if [ "$confirmation" = "$docker_name" ] && docker rm "$docker_id" >/dev/null 2>&1; then
-                            docker_notice="✅ Container removed: $docker_name"
-                            break
+                        docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+                        if [ "$docker_state" = "locked" ]; then
+                        docker_notice="❌ Container is locked. Unlock it before removal."
                         else
-                            docker_notice="❌ Removal cancelled or failed."
+                            echo "This removes the container only. Its images and named volumes remain."
+                            read -r -e -p "Type the container name to confirm removal ($docker_name): " confirmation
+                            if [ "$confirmation" = "$docker_name" ] && docker rm "$docker_id" >/dev/null 2>&1; then
+                                docker_notice="✅ Container removed: $docker_name"
+                                break
+                            else
+                                docker_notice="❌ Removal cancelled or failed."
+                            fi
                         fi
                     fi
                     ;;
@@ -1446,11 +1450,15 @@ docker_container_management_menu() {
                     ;;
                 5) docker_show_mounts "$docker_id" ;;
                 6)
-                    docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
-                    if [ "$docker_state" = "locked" ]; then
-                        echo "❌ Container is locked. Unlock it before purging."
+                    if [[ "$docker_status" == Up* ]]; then
+                        docker_notice="❌ This container is running. Stop it first before purging it."
                     else
-                        docker_purge_container_resources "$docker_id" "$docker_name" && break
+                        docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+                        if [ "$docker_state" = "locked" ]; then
+                        echo "❌ Container is locked. Unlock it before purging."
+                        else
+                            docker_purge_container_resources "$docker_id" "$docker_name" && break
+                        fi
                     fi
                     ;;
                 7) docker_purge_unlocked_stopped; break ;;
