@@ -609,14 +609,16 @@ docker_show_mounts() {
     local -a mount_lines
     mapfile -t mount_lines < <(docker inspect "$docker_container" --format '{{range .Mounts}}{{printf "%s\t%s\t%s\t%s\t%t\n" .Type .Name .Source .Destination .RW}}{{end}}' 2>/dev/null)
     echo
+    printf '%*s\n' 114 '' | tr ' ' '='
     echo "Container storage connections"
     echo "A bind mount is an ordinary server folder. A named volume is persistent Docker-managed data."
+    echo
     if [ "${#mount_lines[@]}" -eq 0 ]; then
         echo "  This container has no declared persistent mounts. Its files are in its writable layer."
         return 0
     fi
     printf "  %-13s %-11s %-56s  %s\n" "Type" "Access" "Container path" "Storage"
-    printf "  %s\n" "============================================================================================================================"
+    printf '%*s\n' 114 '' | tr ' ' '='
     for mount_line in "${mount_lines[@]}"; do
         [ -n "$mount_line" ] || continue
         IFS=$'\t' read -r mount_type mount_name mount_source mount_destination mount_rw <<< "$mount_line"
@@ -628,7 +630,7 @@ docker_show_mounts() {
         [ "$mount_rw" = "true" ] && mount_access="read/write" || mount_access="read-only"
         printf "  %-13s %-11s %-56s  %s\n" "$mount_type_display" "$mount_access" "$mount_destination" "$mount_storage"
         if [ "$mount_type" = "volume" ]; then
-            printf "  %-13s %-11s %-56s  %s\n" "" "" "Docker storage path:" "$mount_source"
+            printf "  %-20s %s\n" "Docker storage path:" "$mount_source"
         fi
     done
     echo
@@ -1491,13 +1493,13 @@ docker_container_management_menu() {
         IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "${docker_lines[$((docker_choice - 1))]}"
         docker_id_display="${docker_id:0:12}"
         [ "${#docker_status}" -le 23 ] || docker_status="${docker_status:0:20}..."
-        [ "${#docker_image}" -le 34 ] || docker_image="${docker_image:0:31}..."
+        [ "${#docker_image}" -le 28 ] || docker_image="${docker_image:0:25}..."
         while true; do
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
             echo
             printf '%*s\n' 114 '' | tr ' ' '='
             echo "Container:  $docker_name"
-            printf "Id: %-12s    Status: %-23s  Image: %-34s Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
+            printf "Id: %-12s    Status: %-17s  Image: %-28s Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
             printf '%*s\n' 114 '' | tr ' ' '='
             if [ -n "$docker_notice" ]; then
                 echo "  $docker_notice"
@@ -1550,6 +1552,7 @@ docker_container_management_menu() {
                         if [ "$docker_state" = "locked" ]; then
                         docker_notice="❌ Container is locked. Unlock it before removal."
                         else
+                            echo
                             echo "This removes the container only. Its images and named volumes remain."
                             read -r -e -p "Type the container name to confirm removal ($docker_name): " confirmation
                             if [ "$confirmation" = "$docker_name" ] && docker rm "$docker_id" >/dev/null 2>&1; then
