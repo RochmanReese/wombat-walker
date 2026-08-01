@@ -738,7 +738,8 @@ def cmd_disk_health(path, device_path, use_sudo=False):
     check_database(path)
     if not re.fullmatch(r"/dev/nvme\d+n\d+", device_path):
         fail("disk health is currently limited to a physical NVMe device such as /dev/nvme0n1")
-    command = ["nvme", "smart-log", "-o", "json", device_path]
+    # Some nvme-cli releases require the device immediately after the subcommand.
+    command = ["nvme", "smart-log", device_path, "-o", "json"]
     if use_sudo:
         command = ["sudo", "-n", *command]
     try:
