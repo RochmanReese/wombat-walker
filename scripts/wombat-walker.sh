@@ -547,7 +547,7 @@ docker_desktop_disk_summary() {
         [[ "$logical_bytes" =~ ^[0-9]+$ ]] || continue
         [[ "$allocated_blocks" =~ ^[0-9]+$ ]] || allocated_blocks=0
         allocated_bytes=$((allocated_blocks * 512))
-        printf "Docker Desktop virtual disk: %s capacity | %s host space allocated" \
+        printf "Docker Desktop virtual disk: %s capacity\nHost space allocated: %s" \
             "$(human_bytes "$logical_bytes")" "$(human_bytes "$allocated_bytes")"
         return 0
     done
@@ -1224,7 +1224,7 @@ docker_scan_all_running() {
 }
 
 docker_workspace() {
-    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes
+    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count
     local -a docker_lines docker_ids docker_names docker_records
     declare -A docker_persistent_sizes=()
     if ! docker info >/dev/null 2>&1; then
@@ -1244,8 +1244,10 @@ docker_workspace() {
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
         docker_ids=(); docker_names=()
         docker_records=()
+        docker_container_count="${#docker_lines[@]}"; docker_running_count=0; docker_exited_count=0
         for docker_line in "${docker_lines[@]}"; do
             IFS=$'\t' read -r docker_container docker_name docker_status docker_image docker_size <<< "$docker_line"
+            if [[ "$docker_status" == Up* ]]; then docker_running_count=$((docker_running_count + 1)); else docker_exited_count=$((docker_exited_count + 1)); fi
             docker_writable="$docker_size"; docker_virtual="-"
             if [[ "$docker_size" =~ ^(.+)[[:space:]]+\(virtual[[:space:]]+(.+)\)$ ]]; then
                 docker_writable="${BASH_REMATCH[1]}"; docker_virtual="${BASH_REMATCH[2]}"
@@ -1279,12 +1281,21 @@ docker_workspace() {
             fi
         fi
         echo
-        echo "======================= Docker containers ======================="
+        printf '%*s\n' 98 '' | tr ' ' '='
+        echo "Wombat Walker — Docker filesystem explorer"
+        echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count"
+        if docker_desktop_disk_summary; then
+            echo
+            echo "Unused virtual capacity does not currently consume host disk space."
+        fi
+        echo "Order: $DOCKER_SORT_ORDER"
+        printf '%*s\n' 98 '' | tr ' ' '='
+        echo
         echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
         echo "Bind mounts are ordinary host folders; named volumes are persistent Docker-managed storage."
         echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
-        docker_desktop_disk_summary && echo "  The unused virtual capacity does not currently consume host disk space."
-        echo "Order: $DOCKER_SORT_ORDER"
+        echo
+        printf '%*s Docker containers %*s\n' 39 '' 40 ''
         printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
