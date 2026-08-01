@@ -2384,6 +2384,13 @@ walk_filesystem() {
                     4)
                         read -r -e -p "Folder to search (q to cancel): " search_custom_folder
                         case "$search_custom_folder" in q|Q|"") notice="Search cancelled."; continue ;; esac
+                        if [ "$search_custom_folder" = "~" ]; then
+                            search_custom_folder="$HOME"
+                        elif [[ "$search_custom_folder" == "~/"* ]]; then
+                            search_custom_folder="$HOME/${search_custom_folder#~/}"
+                        elif [[ "$search_custom_folder" != /* ]]; then
+                            search_custom_folder="$current/$search_custom_folder"
+                        fi
                         if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
                             notice="❌ Search folder is unavailable or cannot be read: $search_custom_folder"
                             continue
