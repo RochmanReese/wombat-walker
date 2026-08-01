@@ -154,6 +154,7 @@ Walker is deliberately opinionated about risky actions:
 | `--home` | Starts in the logged-in user's home folder. |
 | `--here` | Starts in the directory from which the command was launched. |
 | `--docker` | Opens Docker workspace directly: containers, mounts, live browsing, scans, search, and guarded data cleanup. |
+| `--diskcheck` | Opens the read-only physical-NVMe health checker directly. |
 | `--filesize on\|off` | Shows file/folder size information; turn it off for faster browsing on slow storage. |
 | `--items-per-page 1-200` | Sets displayed rows for this run. The in-app setting is remembered for later sessions. |
 | `--sort alphabetical\|largest\|smallest\|updated` | Sets initial folder order. Largest/smallest requires `--filesize on`. |

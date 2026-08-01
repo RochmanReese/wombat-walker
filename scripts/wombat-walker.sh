@@ -30,6 +30,7 @@ SET_POLICY=""
 PRIVILEGED_BROWSE=""
 FILE_ACTION=""
 DOCKER_LAUNCH="off"
+DISK_HEALTH_LAUNCH="off"
 PICK_FOLDER="off"
 START_PATH="/"
 START_PATH_SET=false
@@ -61,6 +62,7 @@ Options:
   --search-limit 1-10000          Results to display with --search (default: 100)
   --set-policy active|archive|manual --root <scan-root>  Set a saved root's refresh policy
   --docker                       Open the Docker workspace directly
+  --diskcheck                    Open the read-only NVMe disk health checker directly
   --pick-folder                  Picker mode: return a chosen folder path to the calling app
   --home                         Start in the logged-in user's home folder
   --here                         Start in the directory where Walker was launched
@@ -80,6 +82,7 @@ walker_help_screen() {
     echo "[m] enters a path; [s] refreshes and searches the current folder or saved scans; [x] opens utilities and this help; [q] quits."
     echo "Use --docker to open Docker directly: browse live container files, see where Docker stores"
     echo "its data, and save fast searchable file/path inventories without changing a container."
+    echo "Use --diskcheck to open the physical-NVMe health checker directly."
     echo "In Docker, [a] scans all running containers after confirmation; stopped containers are skipped."
     echo
     echo "Regular files offer safe view, editor choices, and recoverable Move to Trash."
@@ -105,6 +108,7 @@ while [ $# -gt 0 ]; do
         --search-limit) SEARCH_LIMIT="$2"; shift 2 ;;
         --set-policy) SET_POLICY="$2"; shift 2 ;;
         --docker) DOCKER_LAUNCH="on"; shift ;;
+        --diskcheck) DISK_HEALTH_LAUNCH="on"; shift ;;
         --pick-folder) PICK_FOLDER="on"; shift ;;
         --privileged-browse) PRIVILEGED_BROWSE="$2"; shift 2 ;;
         --file-action) FILE_ACTION="$2"; shift 2 ;;
@@ -165,6 +169,7 @@ ACTION_COUNT=0
 [ -n "$SEARCH_WORDS" ] && ACTION_COUNT=$((ACTION_COUNT + 1))
 [ -n "$SET_POLICY" ] && ACTION_COUNT=$((ACTION_COUNT + 1))
 [ "$DOCKER_LAUNCH" = "on" ] && ACTION_COUNT=$((ACTION_COUNT + 1))
+[ "$DISK_HEALTH_LAUNCH" = "on" ] && ACTION_COUNT=$((ACTION_COUNT + 1))
 [ "$ACTION_COUNT" -le 1 ] || { echo "❌ Use only one direct action at a time."; exit 1; }
 if [ "${LIST_SCANS:-off}" = "on" ] && { [ -n "$DEEP_SCAN" ] || [ -n "$SHOW_SCAN" ] || [ -n "$SEARCH_WORDS" ] || [ -n "$SET_POLICY" ]; }; then
     echo "❌ --list-scans cannot be combined with another cache action."; exit 1
@@ -3436,5 +3441,8 @@ walk_filesystem() {
 
 if [ "$DOCKER_LAUNCH" = "on" ]; then
     docker_workspace
+fi
+if [ "$DISK_HEALTH_LAUNCH" = "on" ]; then
+    disk_health_checker
 fi
 walk_filesystem
