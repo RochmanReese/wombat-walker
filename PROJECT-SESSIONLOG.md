@@ -11,6 +11,7 @@ New entries go at the top. Each entry records the working state, verification, n
 - Added a Docker-explorer header line showing Docker Engine's reported image, container-layer, volume, and build-cache storage categories.
 - Kept the existing Docker Desktop virtual-disk capacity and host-allocation line separate, because it is the meaningful host-disk figure and cannot be inferred from container virtual sizes.
 - Added per-container progress, elapsed time, and a rolling average ETA to writable named-volume and bind-mount measurement.
+- Added persistent smallest-first Docker order choices for Layer, Size, and Persistent data, alongside the existing largest-first views.
 
 ### Verification
 

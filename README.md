@@ -42,6 +42,8 @@ the actual host allocation of Docker Desktop's virtual disk. Select a running co
 named volumes and bind mounts connect, save searchable metadata scans, and find large files.
 Persistent-data measurement reports the container currently being checked, completed count, elapsed
 time, and a rolling estimate for the remaining containers.
+Docker ordering supports alphabetical/status views plus largest-first and smallest-first views for
+container layers, virtual size, and measured persistent data.
 
 Docker Container Management can start or stop groups of containers, lock stopped containers against
 accidental removal, inspect the configured in-container user, remove a container while preserving

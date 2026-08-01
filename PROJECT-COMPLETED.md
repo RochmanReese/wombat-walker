@@ -13,5 +13,6 @@
 - Made mounted-storage information readable: full mount paths, live total/used/free/usage figures, whole-drive versus partition classification, and USB/internal connection type.
 - Added Docker Engine storage-category totals (images, container layers, volumes, build cache) alongside Docker Desktop's actual host virtual-disk allocation.
 - Added visible per-container progress, elapsed time, and a rolling ETA while calculating writable Docker volume and bind-mount data.
+- Added persistent Docker ordering choices for both largest-first and smallest-first Layer, Size, and Persistent data views.
 - Added and dogfooded a read-only physical-NVMe health check: direct `--diskcheck` launch, physical-drive picker, explicit sudo fallback, exact command diagnostics, normalized SQLite snapshots, readable local timestamps, saved in-app history, and aligned three-column reports.
 - Added the v2 disk-health planning brief; broader SATA/HDD/USB diagnostics and self-tests remain deferred until v2 modularization.

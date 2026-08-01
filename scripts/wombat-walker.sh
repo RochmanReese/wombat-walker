@@ -434,7 +434,7 @@ load_preferences() {
     esac
     saved_docker_order="$(sed -n 's/^DOCKER_SORT_ORDER=//p' "$WALKER_PREFERENCES" | head -n 1)"
     case "$saved_docker_order" in
-        alphabetical|status|writable|virtual|persistent) DOCKER_SORT_ORDER="$saved_docker_order" ;;
+        alphabetical|status|writable|writable-smallest|virtual|virtual-smallest|persistent|persistent-smallest) DOCKER_SORT_ORDER="$saved_docker_order" ;;
     esac
     saved_file_order="$(sed -n 's/^DEFAULT_FILE_SORT_ORDER=//p' "$WALKER_PREFERENCES" | head -n 1)"
     case "$saved_file_order" in
@@ -1727,7 +1727,7 @@ docker_container_management_menu() {
 }
 
 docker_workspace() {
-    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count docker_id_display docker_progress_total docker_progress_completed docker_progress_started docker_progress_elapsed docker_progress_remaining docker_persistent_value
+    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count docker_id_display docker_progress_total docker_progress_completed docker_progress_started docker_progress_elapsed docker_progress_remaining docker_persistent_value docker_order_label
     local -a docker_lines docker_ids docker_names docker_records
     declare -A docker_persistent_sizes=()
     if ! docker info >/dev/null 2>&1; then
@@ -1758,17 +1758,17 @@ docker_workspace() {
             fi
             case "$DOCKER_SORT_ORDER" in
                 status) docker_key="$docker_status" ;;
-                writable)
+                writable|writable-smallest)
                     docker_size_bytes="$(docker_size_to_bytes "$docker_writable")"
                     [[ "$docker_size_bytes" =~ ^[0-9]+$ ]] || docker_size_bytes=0
                     docker_key="$(printf '%020d' "$docker_size_bytes")"
                     ;;
-                virtual)
+                virtual|virtual-smallest)
                     docker_size_bytes="$(docker_size_to_bytes "$docker_virtual")"
                     [[ "$docker_size_bytes" =~ ^[0-9]+$ ]] || docker_size_bytes=0
                     docker_key="$(printf '%020d' "$docker_size_bytes")"
                     ;;
-                persistent)
+                persistent|persistent-smallest)
                     docker_size_bytes="${docker_persistent_sizes[$docker_container]:-0}"
                     [[ "$docker_size_bytes" =~ ^[0-9]+$ ]] || docker_size_bytes=0
                     docker_key="$(printf '%020d' "$docker_size_bytes")"
@@ -1778,7 +1778,9 @@ docker_workspace() {
             docker_records+=("$docker_key"$'\t'"$docker_line")
         done
         if [ "${#docker_records[@]}" -gt 0 ]; then
-            if [ "$DOCKER_SORT_ORDER" = "writable" ] || [ "$DOCKER_SORT_ORDER" = "virtual" ] || [ "$DOCKER_SORT_ORDER" = "persistent" ]; then
+            if [[ "$DOCKER_SORT_ORDER" == *-smallest ]]; then
+                mapfile -t docker_lines < <(printf '%s\n' "${docker_records[@]}" | LC_ALL=C sort -t $'\t' -k1,1n | cut -f2-)
+            elif [ "$DOCKER_SORT_ORDER" = "writable" ] || [ "$DOCKER_SORT_ORDER" = "virtual" ] || [ "$DOCKER_SORT_ORDER" = "persistent" ]; then
                 mapfile -t docker_lines < <(printf '%s\n' "${docker_records[@]}" | LC_ALL=C sort -t $'\t' -k1,1nr | cut -f2-)
             else
                 mapfile -t docker_lines < <(printf '%s\n' "${docker_records[@]}" | LC_ALL=C sort -t $'\t' -k1,1f | cut -f2-)
@@ -1789,11 +1791,20 @@ docker_workspace() {
         echo "Wombat Walker — Docker filesystem explorer"
         echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count    Locked :$docker_locked_count"
         echo "Docker Engine storage: Images $DOCKER_IMAGES_DISPLAY    Layers $DOCKER_CONTAINER_LAYERS_DISPLAY    Volumes $DOCKER_VOLUMES_DISPLAY    Cache $DOCKER_BUILD_CACHE_DISPLAY"
+        case "$DOCKER_SORT_ORDER" in
+            writable) docker_order_label="layer: largest first" ;;
+            writable-smallest) docker_order_label="layer: smallest first" ;;
+            virtual) docker_order_label="size: largest first" ;;
+            virtual-smallest) docker_order_label="size: smallest first" ;;
+            persistent) docker_order_label="persistent: largest first" ;;
+            persistent-smallest) docker_order_label="persistent: smallest first" ;;
+            *) docker_order_label="$DOCKER_SORT_ORDER" ;;
+        esac
         if docker_desktop_disk_summary; then
             echo
-            printf "%-74s  Order: %s\n" "Unused virtual capacity does not currently consume host disk space." "$DOCKER_SORT_ORDER"
+            printf "%-74s  Order: %s\n" "Unused virtual capacity does not currently consume host disk space." "$docker_order_label"
         else
-            printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
+            printf "%-74s  Order: %s\n" "" "$docker_order_label"
         fi
         printf '%*s\n' 114 '' | tr ' ' '='
         printf "  %-5s%-13s%-20s%-17s%-26s %5s%10s %12s\n" "No." "ID" "Container" "Status" "Image" "Layer" "Size" "Persistent"
@@ -1862,18 +1873,21 @@ docker_workspace() {
             a|A) docker_scan_all_running ;;
             s|S) docker_search_menu ;;
             o|O)
-                printf "  %-34s%-24s%s\n" "[1] Alphabetical by container name" "[2] Status" "[3] Layer size"
-                printf "  %-34s%s\n" "[4] Image/virtual size" "[5] Persistent data"
+                printf "  %-29s%-20s%-29s%s\n" "[1] Alphabetical" "[2] Status" "[3] Layer: largest" "[4] Layer: smallest"
+                printf "  %-29s%-29s%-29s%s\n" "[5] Size: largest" "[6] Size: smallest" "[7] Persistent: largest" "[8] Persistent: smallest"
                 read -r -e -p "> " docker_sort_choice
                 case "$docker_sort_choice" in
                     1) DOCKER_SORT_ORDER="alphabetical" ;;
                     2) DOCKER_SORT_ORDER="status" ;;
                     3) DOCKER_SORT_ORDER="writable" ;;
-                    4) DOCKER_SORT_ORDER="virtual" ;;
-                    5) DOCKER_SORT_ORDER="persistent" ;;
-                    *) echo "❌ Enter 1, 2, 3, 4, or 5." ;;
+                    4) DOCKER_SORT_ORDER="writable-smallest" ;;
+                    5) DOCKER_SORT_ORDER="virtual" ;;
+                    6) DOCKER_SORT_ORDER="virtual-smallest" ;;
+                    7) DOCKER_SORT_ORDER="persistent" ;;
+                    8) DOCKER_SORT_ORDER="persistent-smallest" ;;
+                    *) echo "❌ Enter a number from 1 to 8." ;;
                 esac
-                if [[ "$docker_sort_choice" =~ ^[1-5]$ ]]; then
+                if [[ "$docker_sort_choice" =~ ^[1-8]$ ]]; then
                     if save_preference "DOCKER_SORT_ORDER" "$DOCKER_SORT_ORDER"; then
                         echo "Docker display order saved: $DOCKER_SORT_ORDER"
                     fi
