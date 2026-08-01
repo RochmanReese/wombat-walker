@@ -555,6 +555,36 @@ def cmd_list_mounts(_path):
         except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
             return None
 
+    def source_device_kind(source):
+        """Describe the backing block device when the mount source is a local /dev path."""
+        if not source or not source.startswith("/dev/"):
+            return "Other source"
+        device_name = os.path.basename(source)
+
+        def path_fallback():
+            if re.fullmatch(r"(?:nvme\d+n\d+p\d+|mmcblk\d+p\d+|(?:sd|vd|xvd|hd)[a-z]+\d+)", device_name):
+                return "Partition"
+            if re.fullmatch(r"(?:nvme\d+n\d+|mmcblk\d+|(?:sd|vd|xvd|hd)[a-z]+)", device_name):
+                return "Disk"
+            return "Device type unavailable"
+        try:
+            result = subprocess.run(
+                ["lsblk", "-no", "TYPE", source],
+                check=True, capture_output=True, text=True,
+            )
+            kind = result.stdout.splitlines()[0].strip().lower()
+        except (OSError, subprocess.CalledProcessError, IndexError):
+            return path_fallback()
+        labels = {
+            "part": "Partition",
+            "disk": "Disk",
+            "lvm": "Logical volume",
+            "crypt": "Encrypted mapping",
+            "loop": "Loop device",
+            "rom": "Optical device",
+        }
+        return labels.get(kind, kind or path_fallback())
+
     # `findmnt --json` represents nested mount points as children.  Keep only a
     # filesystem's real root, which removes bind mounts such as /tmp and the
     # repository sandbox while retaining genuine disks and network mounts.
@@ -563,13 +593,15 @@ def cmd_list_mounts(_path):
     print("=" * 132)
     for mount in mounts:
         target = mount.get("target")
+        source = mount.get("source")
         print(f"{clipped(target, 40):<40}  {clipped(mount.get('source'), 20):<20}  {clipped(mount.get('fstype'), 8):<8}  {clipped(mount.get('uuid'), 37):<37}  {mount.get('label') or '-'}")
         usage = filesystem_usage(target)
+        device_kind = source_device_kind(source)
         if usage:
             total, used, available, percent = usage
-            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent}")
+            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent:<5}  Device: {device_kind}")
         else:
-            print("Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable")
+            print(f"Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable    Device: {device_kind}")
         print()
 
 
