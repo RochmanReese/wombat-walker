@@ -2368,9 +2368,11 @@ walk_filesystem() {
                 search_combined="off"
                 search_direct="off"
                 search_scope=""
+                search_folder_label="$(basename "$current")"
+                [ "$current" = "/" ] && search_folder_label="/"
                 echo "Where do you want to search?"
-                echo "  [1] This folder only"
-                echo "  [2] This folder and all descendants"
+                echo "  [1] This folder only: $search_folder_label"
+                echo "  [2] This folder and all descendants: $search_folder_label"
                 echo "  [3] Search every saved host-folder scan"
                 echo "  [4] Choose another folder"
                 echo "  [5] Search saved host and Docker scans"
@@ -2381,16 +2383,16 @@ walk_filesystem() {
                     3) search_scope="" ;;
                     4)
                         read -r -e -p "Folder to search (q to cancel): " search_custom_folder
-                        case "$search_custom_folder" in q|Q|"") echo "Search cancelled."; continue ;; esac
+                        case "$search_custom_folder" in q|Q|"") notice="Search cancelled."; continue ;; esac
                         if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
-                            echo "❌ That folder is unavailable or cannot be read: $search_custom_folder"
+                            notice="❌ Search folder is unavailable or cannot be read: $search_custom_folder"
                             continue
                         fi
                         search_scope="$(realpath "$search_custom_folder")"
                         ;;
                     5) search_scope=""; search_combined="on" ;;
-                    q|Q|"") echo "Search cancelled."; continue ;;
-                    *) echo "❌ Enter 1, 2, 3, 4, 5, or q."; continue ;;
+                    q|Q|"") notice="Search cancelled."; continue ;;
+                    *) notice="❌ Enter 1, 2, 3, 4, 5, or q."; continue ;;
                 esac
                 if [ -n "$search_scope" ]; then
                     echo "This search will refresh: $search_scope"
@@ -2399,8 +2401,8 @@ walk_filesystem() {
                         n|N|no|NO) ;;
                         *)
                             echo "Refreshing Walker's saved search index below: $search_scope"
-                            if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$search_scope" little; then
-                                echo "❌ Could not refresh this folder's search index. Search was cancelled."
+                            if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$search_scope" little 2>/dev/null; then
+                                notice="❌ Could not refresh this folder's search index. Search was cancelled."
                                 continue
                             fi
                             ;;
@@ -2408,7 +2410,7 @@ walk_filesystem() {
                 fi
                 read -r -e -p "Enter search words (q to cancel): " search_words
                 case "$search_words" in
-                    q|Q|"") echo "Search cancelled."; continue ;;
+                    q|Q|"") notice="Search cancelled."; continue ;;
                 esac
                 search_min_size=""
                 search_max_size=""
@@ -2417,13 +2419,25 @@ walk_filesystem() {
                 while true; do
                     echo
                     if [ "$search_combined" = "on" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search "$WALKER_DATABASE" "$search_words" "$SEARCH_LIMIT" "$search_offset" "$search_order" "$search_min_size" "$search_max_size" || break
+                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search "$WALKER_DATABASE" "$search_words" "$SEARCH_LIMIT" "$search_offset" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null; then
+                            notice="❌ Search failed. Check the search words and filters, then try again."
+                            break
+                        fi
                     elif [ "$search_direct" = "on" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" || break
+                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null; then
+                            notice="❌ Search failed. Check the search words and filters, then try again."
+                            break
+                        fi
                     elif [ -n "$search_scope" ]; then
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" || break
+                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null; then
+                            notice="❌ Search failed. Check the search words and filters, then try again."
+                            break
+                        fi
                     else
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" - "$search_order" "$search_min_size" "$search_max_size" || break
+                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" - "$search_order" "$search_min_size" "$search_max_size" 2>/dev/null; then
+                            notice="❌ Search failed. Check the search words and filters, then try again."
+                            break
+                        fi
                     fi
                     echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [q] Return"
                     read -r -e -p "Open result number, or choose n/p/o/f/q: " search_result_number
