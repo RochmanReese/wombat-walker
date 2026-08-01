@@ -1727,7 +1727,7 @@ docker_container_management_menu() {
 }
 
 docker_workspace() {
-    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count docker_id_display
+    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count docker_id_display docker_progress_total docker_progress_completed docker_progress_started docker_progress_elapsed docker_progress_remaining docker_persistent_value
     local -a docker_lines docker_ids docker_names docker_records
     declare -A docker_persistent_sizes=()
     if ! docker info >/dev/null 2>&1; then
@@ -1831,11 +1831,32 @@ docker_workspace() {
             k|K) docker_container_management_menu ;;
             r|R) ;;
             d|D)
-                echo "Calculating writable named-volume and bind-mount data for running containers..."
+                docker_progress_total=0
+                for docker_line in "${docker_lines[@]}"; do
+                    IFS=$'\t' read -r docker_container docker_name docker_status docker_image docker_size <<< "$docker_line"
+                    [[ "$docker_status" == Up* ]] && docker_progress_total=$((docker_progress_total + 1))
+                done
+                if [ "$docker_progress_total" -eq 0 ]; then
+                    echo "No running containers have writable named-volume or bind-mount data to measure."
+                    continue
+                fi
+                docker_progress_completed=0
+                docker_progress_started="$(date +%s)"
+                echo "Calculating writable named-volume and bind-mount data — 0 of $docker_progress_total running containers measured"
                 for docker_line in "${docker_lines[@]}"; do
                     IFS=$'\t' read -r docker_container docker_name docker_status docker_image docker_size <<< "$docker_line"
                     [[ "$docker_status" == Up* ]] || continue
-                    docker_persistent_sizes["$docker_container"]="$(docker_persistent_data_bytes "$docker_container")"
+                    docker_progress_completed=$((docker_progress_completed + 1))
+                    echo "  [$docker_progress_completed/$docker_progress_total] Measuring $docker_name..."
+                    docker_persistent_value="$(docker_persistent_data_bytes "$docker_container")"
+                    docker_persistent_sizes["$docker_container"]="$docker_persistent_value"
+                    docker_progress_elapsed=$(( $(date +%s) - docker_progress_started ))
+                    if [ "$docker_progress_completed" -lt "$docker_progress_total" ]; then
+                        docker_progress_remaining=$(( docker_progress_elapsed * (docker_progress_total - docker_progress_completed) / docker_progress_completed ))
+                        echo "      Done: $(human_bytes "$docker_persistent_value")    ${docker_progress_elapsed}s elapsed    Approx. ${docker_progress_remaining}s remaining"
+                    else
+                        echo "      Done: $(human_bytes "$docker_persistent_value")    ${docker_progress_elapsed}s elapsed    Measurement complete"
+                    fi
                 done
                 ;;
             a|A) docker_scan_all_running ;;

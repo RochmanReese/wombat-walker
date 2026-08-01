@@ -40,6 +40,8 @@ storage**. It lists containers with status, image/layer size, virtual size, and 
 persistent data. Its header also separates Docker Engine image/layer/volume/cache accounting from
 the actual host allocation of Docker Desktop's virtual disk. Select a running container to browse its live filesystem, inspect exactly where
 named volumes and bind mounts connect, save searchable metadata scans, and find large files.
+Persistent-data measurement reports the container currently being checked, completed count, elapsed
+time, and a rolling estimate for the remaining containers.
 
 Docker Container Management can start or stop groups of containers, lock stopped containers against
 accidental removal, inspect the configured in-container user, remove a container while preserving
