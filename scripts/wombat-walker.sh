@@ -1373,7 +1373,7 @@ docker_container_management_menu() {
 }
 
 docker_workspace() {
-    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count
+    local docker_choice docker_container docker_name docker_status docker_image docker_size docker_line docker_writable docker_virtual docker_persistent docker_key docker_sort_choice docker_size_bytes docker_container_count docker_running_count docker_exited_count docker_locked_count docker_id_display
     local -a docker_lines docker_ids docker_names docker_records
     declare -A docker_persistent_sizes=()
     if ! docker info >/dev/null 2>&1; then
@@ -1441,7 +1441,7 @@ docker_workspace() {
             printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
         fi
         printf '%*s\n' 114 '' | tr ' ' '='
-        printf "  %-5s%-22s%-18s%-25s %12s  %12s %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" " Persistent"
+        printf "  %-5s%-13s%-20s%-17s%-22s %10s %10s %12s\n" "No." "ID" "Container" "Status" "Image" "Layer" "Size" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
         fi
@@ -1456,10 +1456,11 @@ docker_workspace() {
             docker_persistent="${docker_persistent_sizes[$docker_container]:-not measured}"
             [[ "$docker_persistent" =~ ^[0-9]+$ ]] && docker_persistent="$(human_bytes "$docker_persistent")"
             [ "$docker_persistent" = "not measured" ] && docker_persistent="  not measured"
-            [ "${#docker_name}" -le 21 ] || docker_name="${docker_name:0:18}..."
-            [ "${#docker_status}" -le 17 ] || docker_status="${docker_status:0:14}..."
-            [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
-            printf "  %-5s%-22s%-18s%-25s %12s  %12s %12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
+            docker_id_display="${docker_container:0:12}"
+            [ "${#docker_name}" -le 19 ] || docker_name="${docker_name:0:16}..."
+            [ "${#docker_status}" -le 16 ] || docker_status="${docker_status:0:13}..."
+            [ "${#docker_image}" -le 21 ] || docker_image="${docker_image:0:18}..."
+            printf "  %-5s%-13s%-20s%-17s%-22s %10s %10s %12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
             docker_choice=$((docker_choice + 1))
         done
         printf '%*s\n' 114 '' | tr ' ' '='
