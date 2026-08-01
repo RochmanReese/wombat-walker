@@ -1437,7 +1437,7 @@ docker_purge_container_resources() {
 }
 
 docker_container_management_menu() {
-    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation management_footer_left management_footer_right docker_notice
+    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state docker_runs_as confirmation management_footer_left management_footer_right docker_notice
     local -a docker_lines
     while true; do
         if [ -n "$docker_notice" ]; then
@@ -1447,31 +1447,38 @@ docker_container_management_menu() {
         fi
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
         echo
-        printf '%*s\n' 114 '' | tr ' ' '='
+        printf '%*s\n' 120 '' | tr ' ' '='
         echo "Wombat Walker — Docker container management"
         echo "Stopped containers are locked by default. Unlock one before removing it."
         echo "Removing a container does not remove its images or named volumes."
-        printf '%*s\n' 114 '' | tr ' ' '='
+        printf '%*s\n' 120 '' | tr ' ' '='
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
             return 0
         fi
-        printf "  %-5s%-13s%-25s%-23s%-34s%-12s\n" "No." "ID" "Container" "Status" "Image" "Safety"
+        printf "  %-5s%-13s%-25s%-17s%-34s%-16s%-12s\n" "No." "ID" "Container" "Status" "Image" "Runs as" "Safety"
         docker_choice=1
         for docker_line in "${docker_lines[@]}"; do
             IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "$docker_line"
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+            docker_runs_as="$(docker inspect --format '{{.Config.User}}' "$docker_id" 2>/dev/null || true)"
+            [ -n "$docker_runs_as" ] || docker_runs_as="image default"
+            if [ "$docker_state" = "locked" ]; then
+                docker_runs_as=" $docker_runs_as"
+                docker_state=" $docker_state"
+            fi
             docker_id_display="${docker_id:0:12}"
             [ "${#docker_name}" -le 24 ] || docker_name="${docker_name:0:21}..."
-            [ "${#docker_status}" -le 22 ] || docker_status="${docker_status:0:19}..."
+            [ "${#docker_status}" -le 16 ] || docker_status="${docker_status:0:13}..."
             [ "${#docker_image}" -le 33 ] || docker_image="${docker_image:0:30}..."
-            printf "  %-5s%-13s%-25s%-23s%-34s%-12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
+            [ "${#docker_runs_as}" -le 15 ] || docker_runs_as="${docker_runs_as:0:12}..."
+            printf "  %-5s%-13s%-25s%-17s%-34s%-16s%-12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_runs_as" "$docker_state"
             docker_choice=$((docker_choice + 1))
         done
-        printf '%*s\n' 114 '' | tr ' ' '='
+        printf '%*s\n' 120 '' | tr ' ' '='
         management_footer_left="  [number] select to manage a container"
         management_footer_right="[q] Return to Docker list"
-        printf "%-*s%s\n" $((114 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
+        printf "%-*s%s\n" $((124 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
