@@ -1565,7 +1565,7 @@ docker_workspace() {
         echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
         echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
         echo
-        printf "  %-34s%-34s%-34s%s\n" "[a] Scan all running containers" "[r] Refresh container list" "[k] manage docker scans" "[?] help"
+        printf "  %-34s%-34s%-34s%s\n" "[a] Scan all running containers" "[r] Refresh container list" "[k] Manage Docker Containers" "[?] help"
         printf "  %-34s%-34s%-34s%s\n" "[o] Change display order" "[s] Search saved Docker scans" "[d] Calculate persistent data" "[q] Walker"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
