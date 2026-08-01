@@ -1017,6 +1017,7 @@ def cmd_docker_search(path, words, limit, offset=0, container_id=None, path_pref
         if group != last_group:
             if last_group is not None:
                 print()
+            print("=" * 98)
             print(f"Container: {container_name}    Storage: {storage}")
             print(f"Saved scan: {finished_at or 'unknown'} ({status})")
             print(f"{'No.':<5}{'Type':<10}{'Logical size':>12}  {'On disk':>12}  Path")
