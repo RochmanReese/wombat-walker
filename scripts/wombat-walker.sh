@@ -528,10 +528,30 @@ docker_help_screen() {
     echo "Named volume: persistent storage managed by Docker, commonly used for"
     echo "databases and application data. It survives container replacement."
     echo
+    echo "Docker Desktop also stores its Linux VM in a sparse virtual disk. Its"
+    echo "virtual capacity can be much larger than the host space physically used."
+    echo
     echo "This Docker workspace is read-only for now. It is safe for discovery:"
     echo "browse a running container, inspect its mounts, and find where its data lives."
     echo "Copy-out and carefully guarded data cleanup will be added separately."
     echo "==============================================================="
+}
+
+docker_desktop_disk_summary() {
+    local disk_path logical_bytes allocated_blocks allocated_bytes
+    for disk_path in \
+        "$HOME/.docker/desktop/vms/0/data/Docker.raw" \
+        "$HOME/.docker/desktop/vms/0/data/Docker.qcow2"; do
+        [ -f "$disk_path" ] || continue
+        read -r logical_bytes allocated_blocks < <(stat -c '%s %b' -- "$disk_path" 2>/dev/null || true)
+        [[ "$logical_bytes" =~ ^[0-9]+$ ]] || continue
+        [[ "$allocated_blocks" =~ ^[0-9]+$ ]] || allocated_blocks=0
+        allocated_bytes=$((allocated_blocks * 512))
+        printf "Docker Desktop virtual disk: %s capacity | %s host space allocated" \
+            "$(human_bytes "$logical_bytes")" "$(human_bytes "$allocated_bytes")"
+        return 0
+    done
+    return 1
 }
 
 calculate_docker_storage() {
@@ -1263,6 +1283,7 @@ docker_workspace() {
         echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
         echo "Bind mounts are ordinary host folders; named volumes are persistent Docker-managed storage."
         echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
+        docker_desktop_disk_summary && echo "  The unused virtual capacity does not currently consume host disk space."
         echo "Order: $DOCKER_SORT_ORDER"
         printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
