@@ -38,6 +38,12 @@ storage**. It lists containers with status, image/layer size, virtual size, and 
 persistent data. Select a running container to browse its live filesystem, inspect exactly where
 named volumes and bind mounts connect, save searchable metadata scans, and find large files.
 
+Docker Container Management can start or stop groups of containers, lock stopped containers against
+accidental removal, inspect the configured in-container user, remove a container while preserving
+its data, or permanently purge one unlocked stopped container. A purge receipt lists the container,
+named volumes, image, and bind mounts that were removed or preserved, together with an estimated
+amount of Docker storage released. Bind-mounted host folders are always preserved.
+
 For data stored in a verified read/write named volume or bind mount, Walker supports guarded cleanup.
 It never presents Docker deletion as recoverable: previews show the matching paths and space, then
 require explicit typed confirmations. This is particularly useful for job queues such as
