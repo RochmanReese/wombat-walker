@@ -1902,6 +1902,36 @@ file_action_menu() {
     done
 }
 
+search_utilities_menu() {
+    local utility_choice
+    while true; do
+        echo
+        echo "Utilities — current folder: $current"
+        echo "  [b] Bulk delete files in this folder (Move to Wombat Trash)"
+        echo "  [g] Manage current folder (copy, move, rename, Trash)"
+        echo "  [t] Permanently delete files from Wombat Trash"
+        echo "  [z] Restore files from Wombat Trash"
+        echo "  [l] View Wombat Trash audit log"
+        echo "  [c] Browse Docker containers and storage"
+        echo "  [!] Open shell in this folder"
+        echo "  [?] Show Walker help"
+        echo "  [q] Return to search results"
+        read -r -e -p "> " utility_choice
+        case "$utility_choice" in
+            b|B) bulk_cleanup_preview "$current" || true ;;
+            g|G) file_management_menu "$current" || true ;;
+            t|T) wombat_trash_manager purge ;;
+            z|Z) wombat_trash_manager restore ;;
+            l|L) python3 "$SCRIPT_DIR/wombat-walker-db.py" operation-list "$WALKER_DATABASE" || true; read -r -e -p "Press Enter to return to Utilities. " _ ;;
+            c|C) docker_workspace ;;
+            '!') (cd "$current" && "${SHELL:-/bin/bash}") ;;
+            \?) walker_help_screen; read -r -e -p "Press Enter to return to Utilities. " _ ;;
+            q|Q|"") return 0 ;;
+            *) notice="❌ Enter b, g, t, z, l, c, !, ?, or q." ;;
+        esac
+    done
+}
+
 if [ -n "$PRIVILEGED_BROWSE" ]; then
     [ "$PRIVILEGED_MODE" = "on" ] || { echo "❌ Protected browsing is unavailable in this user-only Walker install."; exit 1; }
     sudo -v && browse_protected_folder "$PRIVILEGED_BROWSE"
@@ -2471,6 +2501,9 @@ walk_filesystem() {
                             esac
                         done
                         [ -n "$search_scope" ] || continue
+                        back_history+=("$current")
+                        current="$search_scope"
+                        page=0
                         ;;
                     5) search_scope=""; search_combined="on" ;;
                     q|Q|"") notice="Search cancelled."; continue ;;
@@ -2521,8 +2554,8 @@ walk_filesystem() {
                             break
                         fi
                     fi
-                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [r] New search words    [q] Return"
-                    read -r -e -p "Open result number, or choose n/p/o/f/r/q: " search_result_number
+                    echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [r] New search words    [x] Utilities    [q] Return"
+                    read -r -e -p "Open result number, or choose n/p/o/f/r/x/q: " search_result_number
                     case "$search_result_number" in
                         q|Q|"") break ;;
                         n|N) search_offset=$((search_offset + SEARCH_LIMIT)); continue ;;
@@ -2557,9 +2590,13 @@ walk_filesystem() {
                             search_offset=0
                             continue
                             ;;
+                        x|X)
+                            search_utilities_menu
+                            continue
+                            ;;
                     esac
                     if ! [[ "$search_result_number" =~ ^[0-9]+$ ]] || [ "$search_result_number" -le "$search_offset" ] || [ "$search_result_number" -gt $((search_offset + SEARCH_LIMIT)) ]; then
-                        echo "❌ Enter a result number shown on this page, n, p, o, f, r, or q."
+                        echo "❌ Enter a result number shown on this page, n, p, o, f, r, x, or q."
                         continue
                     fi
                     if [ "$search_combined" = "on" ]; then
