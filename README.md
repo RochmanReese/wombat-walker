@@ -102,7 +102,8 @@ Inside Walker, the bottom of each view shows the available keys. The most common
 | `o` | Change folder display order. |
 | `g` | Manage the current folder: copy, move, rename, create-folder, and Trash actions. |
 | `s` | Choose a scope, refresh if needed, and search; refine results by size. |
-| `x` | Open Help & utilities: Docker, mounts, scan refresh, cleanup, preferences, help, and shell. |
+| `x` | Open Management Utilities: Docker, mounts, scan refresh, cleanup, Trash, preferences, and shell. |
+| `?` | Show Walker help and command-line flags. |
 | `!` | Open a normal shell in the current folder; type `exit` to return. |
 | `q` | Return or quit safely. |
 

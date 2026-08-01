@@ -2220,8 +2220,9 @@ walk_filesystem() {
         else
             dot_action="[!] Open shell in this folder"
         fi
-        printf "  %-31s%-28s%-21s%s\n" "$dot_action" "[u] Up one folder" "[x] Help & utilities" "[g] Manage current folder"
-        printf "  %-31s%-28s%-21s%s\n" "[o] Change display order" "[s] Search folders & files" "[d] Previous folder" "[q] Quit"
+        printf "  %-31s%-28s%-21s%s\n" "$dot_action" "[u] Up one folder" "[d] Previous folder" "[x] Management Utilities"
+        printf "  %-31s%-28s%-21s%s\n" "[o] Change display order" "[s] Search folders & files" "[g] Manage current folder" "[q] Quit"
+        printf "  %-31s\n" "[?] Help"
         echo
         if [ -n "$notice" ]; then
             echo "  $notice"
@@ -2248,6 +2249,10 @@ walk_filesystem() {
                 ;;
             g|G)
                 file_management_menu "$current" || true
+                ;;
+            \?)
+                walker_help_screen
+                read -r -e -p "Press Enter to return to Walker. " _
                 ;;
             u|U) [ "$current" = "/" ] || { back_history+=("$current"); current="$(dirname "$current")"; page=0; } ;;
             d|D)
