@@ -2440,6 +2440,126 @@ file_action_menu() {
     done
 }
 
+disk_health_history() {
+    local history_choice snapshot_id
+    local -a history_fields
+    while true; do
+        history_fields=()
+        mapfile -d '' -t history_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health-history "$WALKER_DATABASE" 2>/dev/null || true)
+        echo
+        printf '%*s\n' 114 '' | tr ' ' '='
+        echo "Saved NVMe disk health history"
+        echo "Each check is saved so you can compare a drive before and after moving it."
+        printf '%*s\n' 114 '' | tr ' ' '='
+        if [ "${#history_fields[@]}" -eq 0 ]; then
+            echo "No saved NVMe health checks yet. Run a read-only health check first."
+            read -r -e -p "Press Enter to return to the NVMe disk list. " _
+            return 0
+        fi
+        echo "  No.  Captured                         Device         Temperature  Endurance  Hours    Errors  Warning"
+        for ((history_choice=0; history_choice<${#history_fields[@]}; history_choice+=10)); do
+            printf '  [%d]  %-31s %-14s %-12s %-10s %-8s %-7s %s\n' \
+                "$((history_choice / 10 + 1))" "${history_fields[$((history_choice + 1))]}" \
+                "${history_fields[$((history_choice + 2))]}" "${history_fields[$((history_choice + 5))]}°C" \
+                "${history_fields[$((history_choice + 6))]}%" "${history_fields[$((history_choice + 7))]}" \
+                "${history_fields[$((history_choice + 8))]}" "${history_fields[$((history_choice + 9))]}"
+            echo "       ${history_fields[$((history_choice + 3))]}    Serial: ${history_fields[$((history_choice + 4))]}"
+        done
+        printf '%*s\n' 114 '' | tr ' ' '='
+        echo "  [number] View saved health report    [q] Return to the NVMe disk list"
+        read -r -e -p "> " history_choice
+        case "$history_choice" in
+            q|Q|"") return 0 ;;
+        esac
+        if ! [[ "$history_choice" =~ ^[0-9]+$ ]] || [ "$history_choice" -lt 1 ] || [ "$history_choice" -gt $(( ${#history_fields[@]} / 10 )) ]; then
+            echo "❌ Enter a listed health report number or q."
+            continue
+        fi
+        snapshot_id="${history_fields[$(((history_choice - 1) * 10))]}"
+        echo
+        python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health-snapshot "$WALKER_DATABASE" "$snapshot_id" || echo "❌ Could not read that saved health report."
+        echo
+        read -r -e -p "Press Enter to return to saved health history. " _
+    done
+}
+
+disk_health_checker() {
+    local disk_choice disk_output disk_device disk_size disk_model disk_serial disk_firmware disk_mounts sudo_choice
+    local -a disk_fields
+    while true; do
+        disk_fields=()
+        mapfile -d '' -t disk_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health-drives "$WALKER_DATABASE" 2>/dev/null || true)
+        echo
+        printf '%*s\n' 114 '' | tr ' ' '='
+        echo "NVMe disk health — select a physical drive"
+        echo "A health check is read-only. It does not scan files, write to the drive, or start a self-test."
+        printf '%*s\n' 114 '' | tr ' ' '='
+        if [ "${#disk_fields[@]}" -eq 0 ]; then
+            echo "No physical NVMe drives were found. USB enclosures, SATA drives, and pen drives are planned for v2."
+            read -r -e -p "Press Enter to return to Mounted Storage. " _
+            return 0
+        fi
+        for ((disk_choice=0; disk_choice<${#disk_fields[@]}; disk_choice+=6)); do
+            disk_device="${disk_fields[$disk_choice]}"; disk_size="${disk_fields[$((disk_choice + 1))]}"
+            disk_model="${disk_fields[$((disk_choice + 2))]}"; disk_serial="${disk_fields[$((disk_choice + 3))]}"
+            disk_firmware="${disk_fields[$((disk_choice + 4))]}"; disk_mounts="${disk_fields[$((disk_choice + 5))]}"
+            echo "  [$((disk_choice / 6 + 1))] $disk_device    Internal NVMe    $(human_bytes "$disk_size")"
+            echo "      Model: $disk_model    Serial: $disk_serial    Firmware: $disk_firmware"
+            echo "      Mounted at: $disk_mounts"
+        done
+        printf '%*s\n' 114 '' | tr ' ' '='
+        echo "  [number] Run read-only health check    [h] View saved health history    [q] Return to Mounted Storage"
+        read -r -e -p "> " disk_choice
+        case "$disk_choice" in
+            q|Q|"") return 0 ;;
+            h|H) disk_health_history; continue ;;
+        esac
+        if ! [[ "$disk_choice" =~ ^[0-9]+$ ]] || [ "$disk_choice" -lt 1 ] || [ "$disk_choice" -gt $(( ${#disk_fields[@]} / 6 )) ]; then
+            echo "❌ Enter a listed drive number, h, or q."
+            continue
+        fi
+        disk_device="${disk_fields[$(((disk_choice - 1) * 6))]}"
+        echo
+        echo "Reading live NVMe health data for $disk_device..."
+        disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" 2>&1)"
+        if [ "$?" -ne 0 ]; then
+            echo "$disk_output"
+            if [[ "$disk_output" =~ [Pp]ermission|[Aa]ccess[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted ]]; then
+                read -r -e -p "Try the same read-only check with sudo? [y/N] " sudo_choice
+                case "$sudo_choice" in
+                    y|Y|yes|YES)
+                        if sudo -v; then
+                            disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" sudo 2>&1)"
+                            echo "$disk_output"
+                        else
+                            echo "❌ Sudo authentication was cancelled; no disk health check was run."
+                        fi
+                        ;;
+                esac
+            fi
+        else
+            echo "$disk_output"
+        fi
+        echo
+        read -r -e -p "Press Enter to return to the NVMe disk list. " _
+    done
+}
+
+mount_storage_menu() {
+    local mount_choice
+    while true; do
+        echo
+        python3 "$SCRIPT_DIR/wombat-walker-db.py" list-mounts "$WALKER_DATABASE" || echo "❌ Could not read the system mount table."
+        echo "  [f] Disk health checker (NVMe)    [q] Return to Utilities"
+        read -r -e -p "> " mount_choice
+        case "$mount_choice" in
+            f|F) disk_health_checker ;;
+            q|Q|"") return 0 ;;
+            *) echo "❌ Enter f or q." ;;
+        esac
+    done
+}
+
 search_utilities_menu() {
     local utility_choice
     while true; do
@@ -2910,10 +3030,7 @@ walk_filesystem() {
                         esac
                         ;;
                     m|M)
-                        echo
-                        python3 "$SCRIPT_DIR/wombat-walker-db.py" list-mounts "$WALKER_DATABASE" || echo "❌ Could not read the system mount table."
-                        echo
-                        read -r -e -p "Press Enter to return to Utilities. " _
+                        mount_storage_menu
                         ;;
                     c|C) docker_workspace ;;
                     '!')

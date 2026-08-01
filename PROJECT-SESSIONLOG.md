@@ -12,6 +12,7 @@ New entries go at the top. Each entry records the working state, verification, n
 - Reworked Mounted Storage into readable 114-character blocks showing device, filesystem, UUID, label, total/used/free space, usage percentage, full mount path, backing device classification, and connection type.
 - Added detection for a partition that occupies virtually an entire physical disk, reported as `Whole drive`; connection detection distinguishes USB, internal NVMe, and internal SATA where the system reports it.
 - Wrote `briefs/WOMBAT-WALKER-DISK-HEALTH-BRIEF.md` for a future v2 read-only disk-health utility covering NVMe, SSD, HDD, USB enclosures, and USB flash drives.
+- Brought forward a narrow immediate-use version for physical NVMe drives: Mounted Storage → `[f] Disk health checker (NVMe)` resolves physical drives, performs a read-only health collection, requests sudo only when needed, renders results, and saves normalized snapshots in SQLite.
 
 ### Verification
 
@@ -21,7 +22,7 @@ New entries go at the top. Each entry records the working state, verification, n
 ### Where we left off
 
 - v1 remains the working day-to-day application; `v1.0-working` remains the original dogfooded baseline at `e7a32c6`.
-- The disk-health feature is deliberately deferred to v2. Start with the new disk-health brief after the v2 shared-input/module work is established.
+- The basic NVMe health check and saved in-app history are available in v1 for immediate drive-migration checks. Broader SATA/HDD/USB health support and self-tests remain deferred to v2.
 
 ### Watch out for
 

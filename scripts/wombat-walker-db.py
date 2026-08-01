@@ -16,6 +16,10 @@ Usage:
   wombat-walker-db.py remove-encryption <absolute-db-path> <directory>
   wombat-walker-db.py list-encryption <absolute-db-path>
   wombat-walker-db.py list-mounts <absolute-db-path>
+  wombat-walker-db.py disk-health-drives <absolute-db-path>
+  wombat-walker-db.py disk-health <absolute-db-path> <nvme-device> [sudo]
+  wombat-walker-db.py disk-health-history <absolute-db-path>
+  wombat-walker-db.py disk-health-snapshot <absolute-db-path> <snapshot-id>
   wombat-walker-db.py docker-inventory <absolute-db-path>
   wombat-walker-db.py docker-scan <absolute-db-path> <container-id> <absolute-container-path>
   wombat-walker-db.py docker-session-summary <absolute-db-path> <started-at>
@@ -188,6 +192,30 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docker_path_search USING fts5(
     container_path, basename, container_name, volume_name, entry_id UNINDEXED,
     tokenize='unicode61 remove_diacritics 2'
 );
+CREATE TABLE IF NOT EXISTS disk_health_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    captured_at TEXT NOT NULL,
+    device_path TEXT NOT NULL,
+    serial TEXT,
+    model TEXT,
+    firmware TEXT,
+    transport TEXT,
+    critical_warning TEXT,
+    temperature_c INTEGER,
+    available_spare_percent INTEGER,
+    spare_threshold_percent INTEGER,
+    percentage_used INTEGER,
+    data_units_read INTEGER,
+    data_units_written INTEGER,
+    power_on_hours INTEGER,
+    power_cycles INTEGER,
+    unsafe_shutdowns INTEGER,
+    media_errors INTEGER,
+    error_log_entries INTEGER,
+    collector TEXT NOT NULL,
+    raw_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_disk_health_snapshots_serial_time ON disk_health_snapshots(serial, captured_at DESC);
 """
 
 
@@ -287,12 +315,12 @@ def cmd_status(path):
     check_database(path)
     conn = connect(path)
     tables = {name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view')")}
-    required = {"scan_roots", "scan_runs", "path_entries", "directory_totals", "scan_errors", "path_search", "docker_containers", "docker_mounts", "docker_scan_runs", "docker_path_entries", "docker_path_search"}
+    required = {"scan_roots", "scan_runs", "path_entries", "directory_totals", "scan_errors", "path_search", "docker_containers", "docker_mounts", "docker_scan_runs", "docker_path_entries", "docker_path_search", "disk_health_snapshots"}
     missing = sorted(required - tables)
     if missing:
         fail("database schema is incomplete: " + ", ".join(missing))
     counts = {}
-    for table in ("scan_roots", "scan_runs", "path_entries", "directory_totals", "scan_errors", "docker_containers", "docker_mounts", "docker_scan_runs", "docker_path_entries"):
+    for table in ("scan_roots", "scan_runs", "path_entries", "directory_totals", "scan_errors", "docker_containers", "docker_mounts", "docker_scan_runs", "docker_path_entries", "disk_health_snapshots"):
         counts[table] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
     conn.close()
     print("ready " + " ".join(f"{key}={value}" for key, value in counts.items()))
@@ -635,6 +663,183 @@ def cmd_list_mounts(_path):
         print(f"Full mount path: {target}")
         print("=" * 114)
         print()
+
+
+def flatten_blockdevices(nodes):
+    for node in nodes:
+        yield node
+        yield from flatten_blockdevices(node.get("children", []))
+
+
+def nvme_drive_records():
+    """Return physical NVMe disks and their current real-root mount paths."""
+    try:
+        result = subprocess.run(
+            ["lsblk", "--bytes", "--json", "-o", "NAME,TYPE,SIZE,MODEL,SERIAL,REV,TRAN"],
+            check=True, capture_output=True, text=True,
+        )
+        devices = list(flatten_blockdevices(json.loads(result.stdout).get("blockdevices", [])))
+        mounts_result = subprocess.run(
+            ["findmnt", "--json", "-o", "TARGET,SOURCE,FSROOT"],
+            check=True, capture_output=True, text=True,
+        )
+        mount_nodes = json.loads(mounts_result.stdout).get("filesystems", [])
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        fail(f"could not read NVMe devices: {exc}")
+
+    mount_rows = [mount for mount in flatten_blockdevices(mount_nodes) if mount.get("fsroot") == "/"]
+    records = []
+    for device in devices:
+        name = device.get("name") or ""
+        if device.get("type") != "disk" or not re.fullmatch(r"nvme\d+n\d+", name):
+            continue
+        device_path = f"/dev/{name}"
+        mounted_at = []
+        for mount in mount_rows:
+            source = mount.get("source") or ""
+            if source == device_path or source.startswith(device_path + "p"):
+                mounted_at.append(mount.get("target") or "?")
+        records.append({
+            "device_path": device_path,
+            "size": int(device.get("size") or 0),
+            "model": (device.get("model") or "-").strip(),
+            "serial": (device.get("serial") or "-").strip(),
+            "firmware": (device.get("rev") or "-").strip(),
+            "transport": (device.get("tran") or "nvme").strip(),
+            "mounts": mounted_at,
+        })
+    return sorted(records, key=lambda record: record["device_path"])
+
+
+def cmd_disk_health_drives(_path):
+    output = sys.stdout.buffer
+    for record in nvme_drive_records():
+        for value in (record["device_path"], str(record["size"]), record["model"], record["serial"], record["firmware"], " | ".join(record["mounts"]) or "not currently mounted"):
+            output.write(value.encode("utf-8", "surrogateescape") + b"\0")
+
+
+def nvme_value(data, key):
+    value = data.get(key)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str) and re.fullmatch(r"\d+", value.strip()):
+        return int(value.strip())
+    return None
+
+
+def nvme_display(value, fallback="not reported"):
+    return fallback if value is None else str(value)
+
+
+def cmd_disk_health(path, device_path, use_sudo=False):
+    check_parent(path)
+    check_database(path)
+    if not re.fullmatch(r"/dev/nvme\d+n\d+", device_path):
+        fail("disk health is currently limited to a physical NVMe device such as /dev/nvme0n1")
+    command = ["nvme", "smart-log", "-o", "json", device_path]
+    if use_sudo:
+        command = ["sudo", "-n", *command]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        health = json.loads(result.stdout)
+    except FileNotFoundError:
+        fail("nvme-cli is not installed; install the nvme-cli package to check NVMe health")
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        fail(f"could not read NVMe health for {device_path}: {detail or exc}")
+
+    record = next((item for item in nvme_drive_records() if item["device_path"] == device_path), None)
+    if not record:
+        fail(f"{device_path} is no longer a visible physical NVMe drive")
+    critical_warning = nvme_value(health, "critical_warning")
+    temperature = nvme_value(health, "temperature")
+    available_spare = nvme_value(health, "avail_spare")
+    spare_threshold = nvme_value(health, "spare_thresh")
+    percentage_used = nvme_value(health, "percent_used")
+    data_units_read = nvme_value(health, "data_units_read")
+    data_units_written = nvme_value(health, "data_units_written")
+    power_on_hours = nvme_value(health, "power_on_hours")
+    power_cycles = nvme_value(health, "power_cycles")
+    unsafe_shutdowns = nvme_value(health, "unsafe_shutdowns")
+    media_errors = nvme_value(health, "media_errors")
+    error_log_entries = nvme_value(health, "num_err_log_entries")
+    captured_at = timestamp()
+    conn = connect(path)
+    try:
+        conn.execute(
+            """INSERT INTO disk_health_snapshots
+               (captured_at,device_path,serial,model,firmware,transport,critical_warning,temperature_c,available_spare_percent,spare_threshold_percent,percentage_used,data_units_read,data_units_written,power_on_hours,power_cycles,unsafe_shutdowns,media_errors,error_log_entries,collector,raw_json)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (captured_at, device_path, record["serial"], record["model"], record["firmware"], record["transport"],
+             nvme_display(critical_warning), temperature, available_spare, spare_threshold, percentage_used,
+             data_units_read, data_units_written, power_on_hours, power_cycles, unsafe_shutdowns, media_errors,
+             error_log_entries, "sudo nvme smart-log" if use_sudo else "nvme smart-log", json.dumps(health, sort_keys=True)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    read_bytes = data_units_read * 512000 if data_units_read is not None else None
+    written_bytes = data_units_written * 512000 if data_units_written is not None else None
+    print("=" * 114)
+    print(f"NVMe disk health — {device_path}")
+    print(f"Model: {record['model']}    Serial: {record['serial']}    Firmware: {record['firmware']}")
+    print(f"Capacity: {human_bytes(record['size'])}    Mounted at: {' | '.join(record['mounts']) or 'not currently mounted'}")
+    print("=" * 114)
+    warning_text = "none" if critical_warning == 0 else nvme_display(critical_warning)
+    print(f"Critical warning: {warning_text}    Temperature: {nvme_display(temperature)}°C    Available spare: {nvme_display(available_spare)}%")
+    print(f"Spare threshold: {nvme_display(spare_threshold)}%    Endurance used: {nvme_display(percentage_used)}%    Media errors: {nvme_display(media_errors)}")
+    print(f"Power-on hours: {nvme_display(power_on_hours)}    Power cycles: {nvme_display(power_cycles)}    Unsafe shutdowns: {nvme_display(unsafe_shutdowns)}")
+    print(f"Data read: {human_bytes(read_bytes) if read_bytes is not None else 'not reported'}    Data written: {human_bytes(written_bytes) if written_bytes is not None else 'not reported'}    Error log entries: {nvme_display(error_log_entries)}")
+    print("=" * 114)
+    print(f"Snapshot saved: {captured_at}    Collector: {'sudo nvme smart-log' if use_sudo else 'nvme smart-log'}")
+
+
+def cmd_disk_health_history(path):
+    """Emit saved snapshot summaries as NUL-separated fields for Walker's history screen."""
+    check_database(path)
+    conn = connect(path)
+    try:
+        rows = conn.execute(
+            """SELECT id, captured_at, device_path, model, serial, temperature_c,
+                      percentage_used, power_on_hours, media_errors, critical_warning
+                 FROM disk_health_snapshots
+                ORDER BY captured_at DESC, id DESC"""
+        ).fetchall()
+    finally:
+        conn.close()
+    output = sys.stdout.buffer
+    for row in rows:
+        for value in row:
+            output.write(str(value if value is not None else "not reported").encode("utf-8", "surrogateescape") + b"\0")
+
+
+def cmd_disk_health_snapshot(path, snapshot_id):
+    check_database(path)
+    if not re.fullmatch(r"[1-9][0-9]*", snapshot_id):
+        fail("snapshot id must be a positive number")
+    conn = connect(path)
+    try:
+        row = conn.execute("SELECT * FROM disk_health_snapshots WHERE id=?", (int(snapshot_id),)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        fail("saved health snapshot was not found")
+    read_bytes = row["data_units_read"] * 512000 if row["data_units_read"] is not None else None
+    written_bytes = row["data_units_written"] * 512000 if row["data_units_written"] is not None else None
+    print("=" * 114)
+    print(f"Saved NVMe health snapshot — {row['device_path']}")
+    print(f"Captured: {row['captured_at']}    Collector: {row['collector']}")
+    print(f"Model: {row['model'] or '-'}    Serial: {row['serial'] or '-'}    Firmware: {row['firmware'] or '-'}")
+    print("=" * 114)
+    warning_text = "none" if str(row["critical_warning"]) == "0" else row["critical_warning"]
+    print(f"Critical warning: {warning_text or 'not reported'}    Temperature: {nvme_display(row['temperature_c'])}°C    Available spare: {nvme_display(row['available_spare_percent'])}%")
+    print(f"Spare threshold: {nvme_display(row['spare_threshold_percent'])}%    Endurance used: {nvme_display(row['percentage_used'])}%    Media errors: {nvme_display(row['media_errors'])}")
+    print(f"Power-on hours: {nvme_display(row['power_on_hours'])}    Power cycles: {nvme_display(row['power_cycles'])}    Unsafe shutdowns: {nvme_display(row['unsafe_shutdowns'])}")
+    print(f"Data read: {human_bytes(read_bytes) if read_bytes is not None else 'not reported'}    Data written: {human_bytes(written_bytes) if written_bytes is not None else 'not reported'}    Error log entries: {nvme_display(row['error_log_entries'])}")
+    print("=" * 114)
 
 
 def docker_size_bytes(value):
@@ -1632,7 +1837,7 @@ def cmd_scan(path, target, context):
 
 
 def main():
-    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10, 11} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-direct", "search-path", "search-direct-path", "combined-search", "combined-search-path"}:
+    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10, 11} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "disk-health-drives", "disk-health", "disk-health-history", "disk-health-snapshot", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-direct", "search-path", "search-direct-path", "combined-search", "combined-search-path"}:
         print(__doc__, file=sys.stderr)
         return 1
     try:
@@ -1668,6 +1873,16 @@ def main():
             cmd_list_encryption(path)
         elif sys.argv[1] == "list-mounts" and len(sys.argv) == 3:
             cmd_list_mounts(path)
+        elif sys.argv[1] == "disk-health-drives" and len(sys.argv) == 3:
+            cmd_disk_health_drives(path)
+        elif sys.argv[1] == "disk-health" and len(sys.argv) in {4, 5}:
+            if len(sys.argv) == 5 and sys.argv[4] != "sudo":
+                fail("disk-health optional mode must be sudo")
+            cmd_disk_health(path, sys.argv[3], len(sys.argv) == 5)
+        elif sys.argv[1] == "disk-health-history" and len(sys.argv) == 3:
+            cmd_disk_health_history(path)
+        elif sys.argv[1] == "disk-health-snapshot" and len(sys.argv) == 4:
+            cmd_disk_health_snapshot(path, sys.argv[3])
         elif sys.argv[1] == "docker-inventory" and len(sys.argv) == 3:
             cmd_docker_inventory(path)
         elif sys.argv[1] == "docker-scan" and len(sys.argv) == 5:

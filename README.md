@@ -17,7 +17,8 @@ another application.
 
 - 📁 **Readable filesystem browsing** — files, folders, sizes, allocated disk space, dates, paging,
   hidden-file control, search, remembered display preferences, and a readable mounted-storage view
-  with live capacity, usage, full paths, backing-device type, and connection information.
+  with live capacity, usage, full paths, backing-device type, connection information, and read-only
+  physical-NVMe health checks and saved health-history reports.
 - 🔎 **Truthful folder search** — search filenames and paths in the current folder after Walker refreshes
   its metadata, or search the wider saved filesystem and Docker inventories.
 - 🧹 **Careful cleanup** — preview files and recoverable Wombat Trash actions before deleting host

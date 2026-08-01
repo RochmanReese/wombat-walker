@@ -14,6 +14,17 @@ answer practical questions about the physical drive behind a mount:
 The feature is diagnostic first. It must never write to a drive, repair a filesystem, erase a
 device, or begin a long test without the user explicitly selecting and confirming that action.
 
+## Current implementation status
+
+A deliberately narrow NVMe-only health checker was brought forward into v1 for an immediate drive
+migration need. From Mounted Storage, `[f] Disk health checker (NVMe)` lists physical NVMe disks;
+selecting one performs a read-only `nvme smart-log` collection, offers explicit sudo fallback only
+when required, renders the health summary, stores a timestamped SQLite snapshot keyed by serial, and
+lets the user reopen saved reports from the same checker.
+
+Everything else in this brief remains v2 work: SATA SSD/HDD support, USB enclosure and pen-drive
+handling, technical details/history views, and optional confirmed self-tests.
+
 ## Why this belongs in Walker
 
 Walker already explains mounted storage, capacity, usage, mount source, device type, connection,

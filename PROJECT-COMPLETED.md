@@ -11,4 +11,5 @@
 
 - Fixed direct Docker launch so `[q]` returns to the host explorer.
 - Made mounted-storage information readable: full mount paths, live total/used/free/usage figures, whole-drive versus partition classification, and USB/internal connection type.
-- Added the v2 disk-health planning brief; implementation remains deferred until v2 modularization.
+- Added a read-only physical-NVMe health check with explicit sudo fallback and timestamped SQLite health snapshots for migration baselines.
+- Added the v2 disk-health planning brief; broader SATA/HDD/USB diagnostics and self-tests remain deferred until v2 modularization.
