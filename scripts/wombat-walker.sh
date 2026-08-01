@@ -2168,7 +2168,7 @@ walk_filesystem() {
             echo "  Use --deep-scan current|filesystem --sudo for an explicit protected inventory."
             echo
         fi
-        printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
+        printf "  %-5s%-10s%-32s %12s  %12s  %-14s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
         index=1
         for child in "${entries[@]}"; do
             item_name="$(basename "$child")"; display_name="$item_name"
@@ -2187,7 +2187,7 @@ walk_filesystem() {
                 && [ "${size_bytes_cache[$child]}" -gt 0 ] && [ "$(( ${allocated_bytes_cache[$child]} * 100 ))" -lt "${size_bytes_cache[$child]}" ]; then
                 sparse_info="sparse"
             fi
-            printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "[$index]" "$entry_kind" "$display_name" "${size_cache[$child]:-}" "${on_disk_cache[$child]:-}" "$owner_display" "$modified_display"
+            printf "  %-5s%-10s%-32s %12s  %12s  %-14s %-16s\n" "[$index]" "$entry_kind" "$display_name" "${size_cache[$child]:-}" "${on_disk_cache[$child]:-}" "$owner_display" "$modified_display"
             index=$((index + 1))
         done
         if [ "$total_entries" -gt "$page_size" ]; then
@@ -2472,14 +2472,14 @@ walk_filesystem() {
                             echo "Choose a folder to search in: $current"
                             echo "Order: $SORT_ORDER    Items per page: $page_size    Hidden: $SHOW_HIDDEN"
                             echo "=================================================================================================="
-                            printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
+                            printf "  %-5s%-10s%-32s %12s  %12s  %-14s %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Owner" "Last updated"
                             for ((search_folder_index=search_folder_picker_start; search_folder_index<search_folder_picker_end; search_folder_index++)); do
                                 search_folder_candidate="${search_folder_picker_entries[$search_folder_index]}"
                                 search_folder_name="$(basename "$search_folder_candidate")"
                                 if [ -d "$search_folder_candidate" ] && [ ! -L "$search_folder_candidate" ]; then search_folder_kind="dir"; else search_folder_kind="file"; fi
                                 [ "${#search_folder_name}" -le 32 ] || search_folder_name="${search_folder_name:0:29}..."
                                 measure_item "$search_folder_candidate"; modified_time "$search_folder_candidate"; file_owner "$search_folder_candidate"
-                                printf "  %-5s%-10s%-32s %12s  %12s  %-18s %-16s\n" "[$((search_folder_index + 1))]" "$search_folder_kind" "$search_folder_name" "${size_cache[$search_folder_candidate]:-}" "${on_disk_cache[$search_folder_candidate]:-}" "$OWNER_DISPLAY" "${modified_cache[$search_folder_candidate]:-}"
+                                printf "  %-5s%-10s%-32s %12s  %12s  %-14s %-16s\n" "[$((search_folder_index + 1))]" "$search_folder_kind" "$search_folder_name" "${size_cache[$search_folder_candidate]:-}" "${on_disk_cache[$search_folder_candidate]:-}" "$OWNER_DISPLAY" "${modified_cache[$search_folder_candidate]:-}"
                             done
                             echo
                             [ "$search_folder_picker_end" -lt "$search_folder_picker_total" ] && printf "  %-34s" "[n] Next page"
