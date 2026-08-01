@@ -1982,7 +1982,7 @@ walk_filesystem() {
         [[ "$cache_total" =~ ^[0-9]+$ ]] || return 0
         folder_total_cache["$current"]="$(human_bytes "$cache_total")"
         cached_folder_status["$current"]="$cache_status"
-        [ "$cache_stale" = "1" ] && cached_folder_status["$current"]="${cache_status}; root total stale"
+        [ "$cache_stale" = "1" ] && cached_folder_status["$current"]="${cache_status}; things may have changed — [v] refresh to update"
         for ((cache_index=6; cache_index<${#cache_fields[@]}; cache_index+=4)); do
             [ "${cache_fields[$cache_index]}" = "SIZE" ] || continue
             cache_path="${cache_fields[$((cache_index + 1))]}"; cache_size="${cache_fields[$((cache_index + 2))]}"; cache_allocated="${cache_fields[$((cache_index + 3))]}"
