@@ -4,6 +4,57 @@ New entries go at the top. Each entry records the working state, verification, n
 
 ---
 
+## Session: 02 August 2026 — Docker storage summary
+
+### What we did
+
+- Added a Docker-explorer header line showing Docker Engine's reported image, container-layer, volume, and build-cache storage categories.
+- Kept the existing Docker Desktop virtual-disk capacity and host-allocation line separate, because it is the meaningful host-disk figure and cannot be inferred from container virtual sizes.
+
+### Verification
+
+- Ran Bash syntax and whitespace checks after the rendering and `docker system df` parsing update.
+
+### Where we left off
+
+- Docker now explains both Engine-managed storage categories and Docker Desktop host allocation at the top of its filesystem explorer.
+
+### Watch out for
+
+- Docker Engine categories and Docker Desktop sparse-disk allocation answer different questions; neither should be presented as a particular container's unique disk usage.
+
+---
+
+## Session: 01 August 2026 — Closed: NVMe disk health checker dogfooded
+
+### What we did
+
+- Completed the physical-NVMe disk-health feature brought forward from the v2 diagnostics brief.
+- Added Mounted Storage → `[f] Disk health checker (NVMe)` and direct `wombat-walker --diskcheck` entry.
+- The picker lists real physical NVMe devices with capacity, model, serial, firmware, and mounted paths.
+- Health collection uses read-only `nvme smart-log <device> --output-format=json`; Walker displays complete failed-command diagnostics and asks before using sudo for a single retry.
+- Added normalized `disk_health_snapshots` SQLite storage, saved in-app health history, readable local timestamps, and aligned three-column live/saved reports.
+- Fixed real-world compatibility issues found during dogfooding against `nvme-cli 2.8`, including positional command ordering and Kelvin-to-Celsius conversion.
+
+### Verification
+
+- Ran `bash -n scripts/wombat-walker.sh`, `python3 -m py_compile scripts/wombat-walker-db.py`, and `git diff --check` throughout implementation.
+- User tested all three physical NVMe drives on the PC using an explicit sudo retry; live checks, saved health reports, history, and readable three-column output worked.
+- Reports correctly surfaced healthy zero-error drives and rendered health values including temperature, spare, endurance, lifetime writes, and unsafe-shutdown count.
+
+### Where we left off
+
+- The NVMe health checker is working v1 functionality for drive-migration decisions.
+- Next diagnostics work remains v2: direct-SATA SSD/HDD SMART support, USB bridge/enclosure handling, comparison across snapshots, and separately confirmed self-tests.
+
+### Watch out for
+
+- `nvme-cli` is an optional package. Walker reports when it is missing; it must be installed by the user or system administrator.
+- Some systems require sudo even for a read-only SMART log. Walker must continue to request it only after an explicit user choice and must never elevate normal filesystem actions.
+- Never present `Percentage Used` as exact remaining capacity; it is a vendor endurance estimate. USB SMART unavailability means an unsupported bridge, not necessarily a failed drive.
+
+---
+
 ## Session: 01 August 2026 — Closed: mount clarity and v2 disk-health planning
 
 ### What we did

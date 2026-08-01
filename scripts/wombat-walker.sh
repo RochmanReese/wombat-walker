@@ -560,17 +560,28 @@ docker_desktop_disk_summary() {
 }
 
 calculate_docker_storage() {
-    local docker_size docker_bytes
+    local docker_type docker_size docker_bytes
     [ -n "${DOCKER_STORAGE_DISPLAY:-}" ] && return 0
     DOCKER_STORAGE_DISPLAY="unavailable"
     DOCKER_STORAGE_BYTES=""
+    DOCKER_IMAGES_DISPLAY="-"
+    DOCKER_CONTAINER_LAYERS_DISPLAY="-"
+    DOCKER_VOLUMES_DISPLAY="-"
+    DOCKER_BUILD_CACHE_DISPLAY="-"
     docker info >/dev/null 2>&1 || return 0
     docker_bytes=0
-    while IFS= read -r docker_size; do
+    while IFS=$'\t' read -r docker_type docker_size; do
         [ -n "$docker_size" ] || continue
         docker_size="$(docker_size_to_bytes "$docker_size")"
-        [[ "$docker_size" =~ ^[0-9]+$ ]] && docker_bytes=$((docker_bytes + docker_size))
-    done < <(docker system df --format '{{.Size}}' 2>/dev/null)
+        [[ "$docker_size" =~ ^[0-9]+$ ]] || continue
+        docker_bytes=$((docker_bytes + docker_size))
+        case "$docker_type" in
+            Images) DOCKER_IMAGES_DISPLAY="$(human_bytes "$docker_size")" ;;
+            Containers) DOCKER_CONTAINER_LAYERS_DISPLAY="$(human_bytes "$docker_size")" ;;
+            "Local Volumes") DOCKER_VOLUMES_DISPLAY="$(human_bytes "$docker_size")" ;;
+            "Build Cache") DOCKER_BUILD_CACHE_DISPLAY="$(human_bytes "$docker_size")" ;;
+        esac
+    done < <(docker system df --format '{{.Type}}\t{{.Size}}' 2>/dev/null)
     if [ "$docker_bytes" -gt 0 ]; then
         DOCKER_STORAGE_BYTES="$docker_bytes"
         DOCKER_STORAGE_DISPLAY="$(human_bytes "$docker_bytes")"
@@ -1777,6 +1788,7 @@ docker_workspace() {
         printf '%*s\n' 114 '' | tr ' ' '='
         echo "Wombat Walker — Docker filesystem explorer"
         echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count    Locked :$docker_locked_count"
+        echo "Docker Engine storage: Images $DOCKER_IMAGES_DISPLAY    Layers $DOCKER_CONTAINER_LAYERS_DISPLAY    Volumes $DOCKER_VOLUMES_DISPLAY    Cache $DOCKER_BUILD_CACHE_DISPLAY"
         if docker_desktop_disk_summary; then
             echo
             printf "%-74s  Order: %s\n" "Unused virtual capacity does not currently consume host disk space." "$DOCKER_SORT_ORDER"

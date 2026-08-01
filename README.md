@@ -37,7 +37,8 @@ Walker has a dedicated Docker workspace so you do not have to piece this togethe
 
 Open it with `wombat-walker --docker`, or use Walker Utilities → **Browse Docker containers and
 storage**. It lists containers with status, image/layer size, virtual size, and optional measured
-persistent data. Select a running container to browse its live filesystem, inspect exactly where
+persistent data. Its header also separates Docker Engine image/layer/volume/cache accounting from
+the actual host allocation of Docker Desktop's virtual disk. Select a running container to browse its live filesystem, inspect exactly where
 named volumes and bind mounts connect, save searchable metadata scans, and find large files.
 
 Docker Container Management can start or stop groups of containers, lock stopped containers against
@@ -99,7 +100,22 @@ wombat-walker /media/wombat/2TBStorage
 
 # Go straight to Docker storage exploration.
 wombat-walker --docker
+
+# Go straight to physical NVMe disk health checks.
+wombat-walker --diskcheck
 ```
+
+### NVMe disk health
+
+From **Management Utilities** → **Mounted Storage**, choose `[f] Disk health checker (NVMe)`, or
+launch it directly with `--diskcheck`. Walker lists physical NVMe drives, then runs the read-only
+`nvme smart-log` diagnostic. If the device requires elevated diagnostic access, Walker shows the
+failed command output and asks before requesting your normal sudo password; it never elevates the
+whole application. Each successful check is saved locally and can be reopened through `[h] View
+saved health history`.
+
+Install `nvme-cli` when using this feature. Walker currently supports physical NVMe drives only;
+SATA HDD/SSD and USB-enclosure diagnostics remain planned work.
 
 Inside Walker, the bottom of each view shows the available keys. The most commonly used are:
 

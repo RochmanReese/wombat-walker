@@ -17,13 +17,15 @@ device, or begin a long test without the user explicitly selecting and confirmin
 ## Current implementation status
 
 A deliberately narrow NVMe-only health checker was brought forward into v1 for an immediate drive
-migration need. From Mounted Storage, `[f] Disk health checker (NVMe)` lists physical NVMe disks;
-selecting one performs a read-only `nvme smart-log` collection, offers explicit sudo fallback only
-when required, renders the health summary, stores a timestamped SQLite snapshot keyed by serial, and
-lets the user reopen saved reports from the same checker.
+migration need and is complete and dogfooded. From Mounted Storage, `[f] Disk health checker
+(NVMe)`, or direct `--diskcheck`, lists physical NVMe disks. Selecting one performs the read-only
+`nvme smart-log <device> --output-format=json` collection, shows the complete command diagnostic
+if it fails, and offers a separate explicit sudo retry when required. Successful checks store a
+timestamped SQLite snapshot keyed by serial and render both live and saved reports in readable
+three-column layouts with local human-readable timestamps.
 
 Everything else in this brief remains v2 work: SATA SSD/HDD support, USB enclosure and pen-drive
-handling, technical details/history views, and optional confirmed self-tests.
+handling, comparative health history, and optional confirmed self-tests.
 
 ## Why this belongs in Walker
 

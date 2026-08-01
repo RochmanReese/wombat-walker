@@ -11,3 +11,11 @@ Stopped containers are locked by default. They must be explicitly unlocked befor
 ## 01 August 2026 — v2 naming and interaction rules
 
 Every v2 function uses a `ww_` prefix. Walker-owned prompts will support global `#` commands through one shared input layer, while editor input and exact destructive confirmations remain untouched.
+
+## 01 August 2026 — NVMe health safety and presentation
+
+Physical-NVMe health was brought forward into v1 for drive-migration decisions. It uses only the
+read-only `nvme smart-log` diagnostic, saves normalized snapshots in Walker's private SQLite
+database, and renders live and saved reports in aligned three-column layouts. Sudo is requested
+only after a normal-user attempt fails and the user explicitly approves the retry; broader
+SATA/HDD/USB diagnostics and all self-tests remain v2 work.

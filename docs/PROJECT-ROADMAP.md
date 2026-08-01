@@ -9,7 +9,7 @@
 - Wombat Trash and guarded host cleanup.
 - Docker inventory, live browsing, saved metadata scans/search, mount inspection, persistent-data calculation, live file editing, lifecycle management, safety locks, bulk start/stop, and permanent purge receipts.
 - Post-baseline v1 polish: direct Docker launch returns to the host explorer; mount inspection now shows full source/path, live capacity, usage, whole-drive versus partition status, and connection type.
-- Narrow v1 NVMe disk health: Mounted Storage can list physical NVMe drives, collect read-only SMART health, request explicit sudo fallback, save SQLite snapshots, and view saved reports in Walker.
+- Narrow v1 NVMe disk health is complete and dogfooded: Mounted Storage and `--diskcheck` can list physical NVMe drives, collect read-only SMART health, request explicit sudo fallback, save SQLite snapshots, and view readable saved reports in Walker.
 - All user-facing actions dogfooded successfully, including Docker purge.
 - Tested code baseline: `v1.0-working` at commit `e7a32c6`.
 
@@ -24,7 +24,7 @@
 5. Extract files, Trash, Docker, and Utilities into focused modules.
 6. Remove duplicated menu, validation, and lifecycle code only after parity checks against v1.
 7. Add fixture and interactive smoke coverage for every extracted module.
-8. Expand the current NVMe-only health check using [WOMBAT-WALKER-DISK-HEALTH-BRIEF.md](../briefs/WOMBAT-WALKER-DISK-HEALTH-BRIEF.md): SATA SSD/HDD, USB enclosure/pen-drive handling, technical history, and optional confirmed self-tests.
+8. Expand the current NVMe-only health check using [WOMBAT-WALKER-DISK-HEALTH-BRIEF.md](../briefs/WOMBAT-WALKER-DISK-HEALTH-BRIEF.md): SATA SSD/HDD, USB enclosure/pen-drive handling, comparative history, and optional confirmed self-tests.
 
 The authoritative v2 plan is [WOMBAT-WALKER-V2-REFACTORING-BRIEF.md](../briefs/WOMBAT-WALKER-V2-REFACTORING-BRIEF.md).
 

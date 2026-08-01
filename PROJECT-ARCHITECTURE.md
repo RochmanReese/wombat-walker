@@ -3,7 +3,7 @@
 ## Runtime
 
 - `scripts/wombat-walker.sh`: interactive Bash application, host and Docker UI, guarded operations, and preference handling.
-- `scripts/wombat-walker-db.py`: private SQLite metadata inventory and FTS-backed host/Docker saved search.
+- `scripts/wombat-walker-db.py`: private SQLite metadata inventory, FTS-backed host/Docker saved search, and timestamped normalized NVMe health snapshots.
 - `scripts/wombat-walker-trash.py`: portable Wombat Trash operations and audit support.
 - `scripts/wombat-walker-privileged.sh` and `scripts/wombat-walker-privileged-list.py`: narrowly scoped protected browsing/actions used only after explicit elevation.
 - `scripts/install-wombat-walker.sh`: system or user installation.
@@ -14,6 +14,7 @@
 - Docker cleanup and purge are permanent and require explicit typed confirmation.
 - Docker bind mounts are preserved by container purge; named volumes/images are removed only when no other container uses them.
 - Saved scans record metadata, not file contents. Live paths are rechecked before actions.
+- NVMe health collection is read-only. Walker first attempts normal-user access, then only after an explicit user choice authenticates sudo for the single `nvme smart-log` command; it does not elevate the interactive application.
 
 ## v2 direction
 
