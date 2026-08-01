@@ -1323,30 +1323,33 @@ docker_purge_container_resources() {
 }
 
 docker_container_management_menu() {
-    local docker_choice docker_line docker_id docker_name docker_status docker_image docker_size docker_state confirmation
+    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation
     local -a docker_lines
     while true; do
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
         echo
-        echo "================ Docker container management ================"
+        printf '%*s\n' 114 '' | tr ' ' '='
+        echo "Wombat Walker — Docker container management"
+        echo "Stopped containers are locked by default. Unlock one before removing it."
+        echo "Removing a container does not remove its images or named volumes."
+        printf '%*s\n' 114 '' | tr ' ' '='
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
             return 0
         fi
-        printf "  %-5s%-25s%-23s%-25s%-12s\n" "No." "Container" "Status" "Image" "Safety"
+        printf "  %-5s%-13s%-25s%-23s%-34s%-12s\n" "No." "ID" "Container" "Status" "Image" "Safety"
         docker_choice=1
         for docker_line in "${docker_lines[@]}"; do
             IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "$docker_line"
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+            docker_id_display="${docker_id:0:12}"
             [ "${#docker_name}" -le 24 ] || docker_name="${docker_name:0:21}..."
             [ "${#docker_status}" -le 22 ] || docker_status="${docker_status:0:19}..."
-            [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
-            printf "  %-5s%-25s%-23s%-25s%-12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
+            [ "${#docker_image}" -le 33 ] || docker_image="${docker_image:0:30}..."
+            printf "  %-5s%-13s%-25s%-23s%-34s%-12s\n" "[$docker_choice]" "$docker_id_display" "$docker_name" "$docker_status" "$docker_image" "$docker_state"
             docker_choice=$((docker_choice + 1))
         done
-        echo
-        echo "  Stopped containers are locked by default. Unlock one before removing it."
-        echo "  Removing a container does not remove its images or named volumes."
+        printf '%*s\n' 114 '' | tr ' ' '='
         echo
         echo "  [q] Return to Docker list"
         read -r -e -p "> " docker_choice
