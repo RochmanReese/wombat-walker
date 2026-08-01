@@ -1305,6 +1305,7 @@ docker_workspace() {
             fi
             docker_persistent="${docker_persistent_sizes[$docker_container]:-not measured}"
             [[ "$docker_persistent" =~ ^[0-9]+$ ]] && docker_persistent="$(human_bytes "$docker_persistent")"
+            [ "$docker_persistent" = "not measured" ] && docker_persistent="  not measured"
             [ "${#docker_name}" -le 21 ] || docker_name="${docker_name:0:18}..."
             [ "${#docker_status}" -le 17 ] || docker_status="${docker_status:0:14}..."
             [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
