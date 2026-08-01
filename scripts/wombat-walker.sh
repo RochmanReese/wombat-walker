@@ -1281,7 +1281,7 @@ docker_workspace() {
             fi
         fi
         echo
-        printf '%*s\n' 113 '' | tr ' ' '='
+        printf '%*s\n' 114 '' | tr ' ' '='
         echo "Wombat Walker — Docker filesystem explorer"
         echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count"
         if docker_desktop_disk_summary; then
@@ -1290,8 +1290,8 @@ docker_workspace() {
         else
             printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
         fi
-        printf '%*s\n' 113 '' | tr ' ' '='
-        printf "  %-5s%-22s%-18s%-25s %12s  %12s   %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
+        printf '%*s\n' 114 '' | tr ' ' '='
+        printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
         fi
@@ -1308,10 +1308,10 @@ docker_workspace() {
             [ "${#docker_name}" -le 21 ] || docker_name="${docker_name:0:18}..."
             [ "${#docker_status}" -le 17 ] || docker_status="${docker_status:0:14}..."
             [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
-            printf "  %-5s%-22s%-18s%-25s %12s  %12s   %12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
+            printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
             docker_choice=$((docker_choice + 1))
         done
-        printf '%*s\n' 113 '' | tr ' ' '='
+        printf '%*s\n' 114 '' | tr ' ' '='
         echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
         echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
         echo
