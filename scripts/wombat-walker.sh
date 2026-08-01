@@ -1699,11 +1699,6 @@ file_management_menu() {
     fi
     walker_management_path_allowed "$managed_path" || return 0
     managed_parent="$(dirname "$managed_path")"
-    if [ ! -w "$managed_parent" ] || [ ! -x "$managed_parent" ]; then
-        echo "❌ You cannot move this protected path to Trash from Walker."
-        echo "  Its parent folder is not writable by this user; Walker never uses sudo for deletion."
-        return 1
-    fi
     if [ -d "$managed_path" ]; then managed_type="folder"; else managed_type="file"; fi
     managed_size="$(du -sh --apparent-size -x -- "$managed_path" 2>/dev/null | awk '{print $1}')"
     [ -n "$managed_size" ] || managed_size="unavailable"
@@ -1724,7 +1719,11 @@ file_management_menu() {
             q|Q|"") return 0 ;;
             1|2)
                 if [ "$management_choice" = 2 ] && walker_mount_root "$managed_path"; then
-                    echo "❌ Walker will not move the root of a mounted filesystem."
+                    notice="❌ Walker will not move the root of a mounted filesystem."
+                    continue
+                fi
+                if [ "$management_choice" = 2 ] && { [ ! -w "$managed_parent" ] || [ ! -x "$managed_parent" ]; }; then
+                    notice="❌ Move is unavailable: the source folder is not writable. Walker never uses sudo for file management."
                     continue
                 fi
                 read -r -e -p "Destination path (existing folder or new item path): " destination_folder
@@ -1784,7 +1783,11 @@ file_management_menu() {
                 ;;
             3)
                 if walker_mount_root "$managed_path"; then
-                    echo "❌ Walker will not rename the root of a mounted filesystem."
+                    notice="❌ Walker will not rename the root of a mounted filesystem."
+                    continue
+                fi
+                if [ ! -w "$managed_parent" ] || [ ! -x "$managed_parent" ]; then
+                    notice="❌ Rename is unavailable: the source folder is not writable. Walker never uses sudo for file management."
                     continue
                 fi
                 read -r -e -p "New name (not a path): " new_name
@@ -1827,7 +1830,11 @@ file_management_menu() {
                 ;;
             t|T)
                 if walker_mount_root "$managed_path"; then
-                    echo "❌ Walker will not move the root of a mounted filesystem to Trash."
+                    notice="❌ Walker will not move the root of a mounted filesystem to Trash."
+                    continue
+                fi
+                if [ ! -w "$managed_parent" ] || [ ! -x "$managed_parent" ]; then
+                    notice="❌ Trash is unavailable: the source folder is not writable. Walker never uses sudo for deletion."
                     continue
                 fi
                 echo "This moves the $managed_type to portable Wombat Trash. It is not a permanent deletion."
