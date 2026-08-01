@@ -1384,6 +1384,7 @@ docker_container_management_menu() {
             echo "  [5] View mounts and persistent data"
             echo "  [6] PURGE EVERYTHING for this container (permanent)"
             echo "  [7] Bulk remove stopped containers"
+            echo
             management_footer_left="  [number] select to manage"
             management_footer_right="[b] Back to container list"
             printf "%-*s%s\n" $((114 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
