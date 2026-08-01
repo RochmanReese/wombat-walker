@@ -1140,6 +1140,7 @@ docker_search_choose_container() {
         done
         echo
         printf "  %-34s%-34s%s\n" "[n] Next page" "[p] Previous page" "[q] Cancel"
+        echo
         read -r -e -p "Choose a container number, n/p/q: " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
