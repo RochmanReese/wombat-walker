@@ -2521,24 +2521,26 @@ disk_health_checker() {
         disk_device="${disk_fields[$(((disk_choice - 1) * 6))]}"
         echo
         echo "Reading live NVMe health data for $disk_device..."
-        disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" 2>&1)"
-        if [ "$?" -ne 0 ]; then
+        if disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" 2>&1)"; then
+            echo "$disk_output"
+        else
             echo "$disk_output"
             if [[ "$disk_output" =~ [Pp]ermission|[Aa]ccess[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted ]]; then
                 read -r -e -p "Try the same read-only check with sudo? [y/N] " sudo_choice
                 case "$sudo_choice" in
                     y|Y|yes|YES)
                         if sudo -v; then
-                            disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" sudo 2>&1)"
-                            echo "$disk_output"
+                            if disk_output="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" disk-health "$WALKER_DATABASE" "$disk_device" sudo 2>&1)"; then
+                                echo "$disk_output"
+                            else
+                                echo "$disk_output"
+                            fi
                         else
                             echo "❌ Sudo authentication was cancelled; no disk health check was run."
                         fi
                         ;;
                 esac
             fi
-        else
-            echo "$disk_output"
         fi
         echo
         read -r -e -p "Press Enter to return to the NVMe disk list. " _
