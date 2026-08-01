@@ -1117,27 +1117,90 @@ browse_docker_container() {
     done
 }
 
+docker_search_choose_container() {
+    local docker_choice docker_line docker_id docker_name docker_status docker_image docker_size docker_page=0 docker_start docker_end
+    local -a docker_lines
+    DOCKER_SEARCH_SELECTED_ID=""
+    DOCKER_SEARCH_SELECTED_NAME=""
+    mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
+    [ "${#docker_lines[@]}" -gt 0 ] || { echo "❌ No Docker containers are available to search."; return 1; }
+    while true; do
+        docker_start=$((docker_page * ITEMS_PER_PAGE)); docker_end=$((docker_start + ITEMS_PER_PAGE))
+        [ "$docker_end" -gt "${#docker_lines[@]}" ] && docker_end="${#docker_lines[@]}"
+        echo
+        echo "Choose a Docker container to search"
+        printf "  %-5s%-13s%-25s%-20s%-28s\n" "No." "ID" "Container" "Status" "Image"
+        for ((docker_choice=docker_start; docker_choice<docker_end; docker_choice++)); do
+            IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "${docker_lines[$docker_choice]}"
+            [ "${#docker_name}" -le 24 ] || docker_name="${docker_name:0:21}..."
+            [ "${#docker_status}" -le 19 ] || docker_status="${docker_status:0:16}..."
+            [ "${#docker_image}" -le 27 ] || docker_image="${docker_image:0:24}..."
+            printf "  %-5s%-13s%-25s%-20s%-28s\n" "[$((docker_choice + 1))]" "${docker_id:0:12}" "$docker_name" "$docker_status" "$docker_image"
+        done
+        echo
+        printf "  %-34s%-34s%s\n" "[n] Next page" "[p] Previous page" "[q] Cancel"
+        read -r -e -p "Choose a container number, n/p/q: " docker_choice
+        case "$docker_choice" in
+            q|Q|"") return 0 ;;
+            n|N)
+                [ "$docker_end" -lt "${#docker_lines[@]}" ] && docker_page=$((docker_page + 1)) || echo "❌ This is the last container page."
+                ;;
+            p|P)
+                [ "$docker_page" -gt 0 ] && docker_page=$((docker_page - 1)) || echo "❌ This is the first container page."
+                ;;
+            *)
+                if [[ "$docker_choice" =~ ^[0-9]+$ ]] && [ "$docker_choice" -ge $((docker_start + 1)) ] && [ "$docker_choice" -le "$docker_end" ]; then
+                    IFS=$'\t' read -r DOCKER_SEARCH_SELECTED_ID DOCKER_SEARCH_SELECTED_NAME docker_status docker_image docker_size <<< "${docker_lines[$((docker_choice - 1))]}"
+                    return 0
+                fi
+                echo "❌ Enter a displayed container number, n, p, or q."
+                ;;
+        esac
+    done
+}
+
 docker_search_menu() {
     local docker_search_words docker_result_number docker_result_path docker_result_parent docker_scope_choice docker_search_order docker_search_order_choice docker_refresh_choice docker_running docker_refresh_path docker_search_offset docker_search_min_size docker_search_max_size
     local scoped_container="${1:--}" scoped_name="${2:-}" scoped_folder="${3:--}"
     local -a docker_result_fields
     if [ "$scoped_container" != "-" ]; then
         echo
-        echo "Search scope"
-        echo "  [1] All saved Docker containers"
-        echo "  [2] This container: $scoped_name"
-        echo "  [3] This folder and descendants: $scoped_folder"
-        echo "  [q] Return without searching"
+        echo "Where do you want to search?"
+        echo "  [1] This container only: $scoped_name"
+        echo "  [2] This folder and all descendants: $scoped_folder"
+        echo "  [3] Search every saved Docker container scan"
+        echo "  [4] Choose another Docker container"
+        echo "  [q] Cancel"
         read -r -e -p "> " docker_scope_choice
         case "$docker_scope_choice" in
-            1) scoped_container="-"; scoped_folder="-" ;;
-            2) scoped_folder="-" ;;
-            3) ;;
+            1) scoped_folder="-" ;;
+            2) ;;
+            3) scoped_container="-"; scoped_folder="-" ;;
+            4)
+                docker_search_choose_container || return 0
+                [ -n "$DOCKER_SEARCH_SELECTED_ID" ] || return 0
+                scoped_container="$DOCKER_SEARCH_SELECTED_ID"; scoped_name="$DOCKER_SEARCH_SELECTED_NAME"; scoped_folder="-"
+                ;;
             q|Q|"") return 0 ;;
-            *) echo "❌ Enter 1, 2, 3, or q."; return 0 ;;
+            *) echo "❌ Enter 1, 2, 3, 4, or q."; return 0 ;;
         esac
     else
-        scoped_folder="-"
+        echo
+        echo "Where do you want to search?"
+        echo "  [1] Search every saved Docker container scan"
+        echo "  [2] Choose a Docker container"
+        echo "  [q] Cancel"
+        read -r -e -p "> " docker_scope_choice
+        case "$docker_scope_choice" in
+            1) scoped_folder="-" ;;
+            2)
+                docker_search_choose_container || return 0
+                [ -n "$DOCKER_SEARCH_SELECTED_ID" ] || return 0
+                scoped_container="$DOCKER_SEARCH_SELECTED_ID"; scoped_name="$DOCKER_SEARCH_SELECTED_NAME"; scoped_folder="-"
+                ;;
+            q|Q|"") return 0 ;;
+            *) echo "❌ Enter 1, 2, or q."; return 0 ;;
+        esac
     fi
     if [ "$scoped_container" != "-" ]; then
         docker_running="$(docker inspect "$scoped_container" --format '{{.State.Running}}' 2>/dev/null || true)"
