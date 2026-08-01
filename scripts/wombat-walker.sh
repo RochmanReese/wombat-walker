@@ -1278,6 +1278,47 @@ docker_purge_unlocked_stopped() {
     echo "Removed $removed stopped container(s). Locked containers skipped: $locked."
 }
 
+docker_purge_container_resources() {
+    local docker_id="$1" docker_name="$2" docker_image docker_mount docker_type docker_volume docker_destination confirmation
+    local -a docker_mounts docker_volumes
+    docker_image="$(docker inspect --format '{{.Config.Image}}' "$docker_id" 2>/dev/null || true)"
+    mapfile -t docker_mounts < <(docker inspect --format '{{range .Mounts}}{{.Type}}\t{{.Name}}\t{{.Destination}}{{"\n"}}{{end}}' "$docker_id" 2>/dev/null)
+    docker_volumes=()
+    echo "This permanently removes the selected container and its unused Docker-managed resources:"
+    echo "  Container: $docker_name"
+    echo "  Image: ${docker_image:-unknown} (only if no other container uses it)"
+    for docker_mount in "${docker_mounts[@]}"; do
+        IFS=$'\t' read -r docker_type docker_volume docker_destination <<< "$docker_mount"
+        if [ "$docker_type" = "volume" ] && [ -n "$docker_volume" ]; then
+            docker_volumes+=("$docker_volume")
+            echo "  Named volume: $docker_volume"
+        elif [ "$docker_type" = "bind" ]; then
+            echo "  Preserved bind mount: $docker_destination"
+        fi
+    done
+    echo "Host bind-mounted folders will not be deleted."
+    read -r -e -p "Type PURGE $docker_name to permanently continue: " confirmation
+    [ "$confirmation" = "PURGE $docker_name" ] || { echo "Purge cancelled."; return 0; }
+    docker stop "$docker_id" >/dev/null 2>&1 || true
+    if ! docker rm "$docker_id" >/dev/null 2>&1; then
+        echo "❌ Could not remove container: $docker_name"
+        return 1
+    fi
+    for docker_volume in "${docker_volumes[@]}"; do
+        if [ -z "$(docker ps -aq --filter "volume=$docker_volume" 2>/dev/null)" ]; then
+            docker volume rm "$docker_volume" >/dev/null 2>&1 || echo "⚠️ Could not remove volume: $docker_volume"
+        else
+            echo "Preserved shared volume: $docker_volume"
+        fi
+    done
+    if [ -n "$docker_image" ] && [ -z "$(docker ps -aq --filter "ancestor=$docker_image" 2>/dev/null)" ]; then
+        docker image rm "$docker_image" >/dev/null 2>&1 || echo "⚠️ Could not remove image: $docker_image"
+    else
+        echo "Preserved image because another container uses it: $docker_image"
+    fi
+    echo "Purged container resources: $docker_name"
+}
+
 docker_container_management_menu() {
     local docker_choice docker_line docker_id docker_name docker_status docker_image docker_size docker_state confirmation
     local -a docker_lines
@@ -1329,7 +1370,8 @@ docker_container_management_menu() {
                 echo "  [4] Lock container"
             fi
             echo "  [5] View mounts and persistent data"
-            echo "  [6] Purge unlocked stopped containers"
+            echo "  [6] Purge this container and unused resources"
+            echo "  [7] Purge all unlocked stopped containers"
             echo "  [b] Back to container list"
             read -r -e -p "> " confirmation
             case "$confirmation" in
@@ -1365,8 +1407,16 @@ docker_container_management_menu() {
                     fi
                     ;;
                 5) docker_show_mounts "$docker_id" ;;
-                6) docker_purge_unlocked_stopped; break ;;
-                *) echo "❌ Choose 1, 2, 3, 4, 5, 6, b, or q." ;;
+                6)
+                    docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
+                    if [ "$docker_state" = "locked" ]; then
+                        echo "❌ Container is locked. Unlock it before purging."
+                    else
+                        docker_purge_container_resources "$docker_id" "$docker_name" && break
+                    fi
+                    ;;
+                7) docker_purge_unlocked_stopped; break ;;
+                *) echo "❌ Choose 1, 2, 3, 4, 5, 6, 7, b, or q." ;;
             esac
         done
     done
