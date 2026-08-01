@@ -740,6 +740,11 @@ def nvme_temperature_c(value):
     return int(value - 273.15) if value >= 273 else value
 
 
+def print_health_columns(*values):
+    """Render three compact, aligned health readings across Walker's 114-character UI."""
+    print("   ".join(f"{label}: {value}".ljust(36) for label, value in values))
+
+
 def cmd_disk_health(path, device_path, use_sudo=False):
     check_parent(path)
     check_database(path)
@@ -801,10 +806,10 @@ def cmd_disk_health(path, device_path, use_sudo=False):
     print(f"Capacity: {human_bytes(record['size'])}    Mounted at: {' | '.join(record['mounts']) or 'not currently mounted'}")
     print("=" * 114)
     warning_text = "none" if critical_warning == 0 else nvme_display(critical_warning)
-    print(f"Critical warning: {warning_text}    Temperature: {nvme_display(temperature)}°C    Available spare: {nvme_display(available_spare)}%")
-    print(f"Spare threshold: {nvme_display(spare_threshold)}%    Endurance used: {nvme_display(percentage_used)}%    Media errors: {nvme_display(media_errors)}")
-    print(f"Power-on hours: {nvme_display(power_on_hours)}    Power cycles: {nvme_display(power_cycles)}    Unsafe shutdowns: {nvme_display(unsafe_shutdowns)}")
-    print(f"Data read: {human_bytes(read_bytes) if read_bytes is not None else 'not reported'}    Data written: {human_bytes(written_bytes) if written_bytes is not None else 'not reported'}    Error log entries: {nvme_display(error_log_entries)}")
+    print_health_columns(("Critical warning", warning_text), ("Temperature", f"{nvme_display(temperature)}°C"), ("Available spare", f"{nvme_display(available_spare)}%"))
+    print_health_columns(("Spare threshold", f"{nvme_display(spare_threshold)}%"), ("Endurance used", f"{nvme_display(percentage_used)}%"), ("Media errors", nvme_display(media_errors)))
+    print_health_columns(("Power-on hours", nvme_display(power_on_hours)), ("Power cycles", nvme_display(power_cycles)), ("Unsafe shutdowns", nvme_display(unsafe_shutdowns)))
+    print_health_columns(("Data read", human_bytes(read_bytes) if read_bytes is not None else "not reported"), ("Data written", human_bytes(written_bytes) if written_bytes is not None else "not reported"), ("Error log entries", nvme_display(error_log_entries)))
     print("=" * 114)
     print(f"Snapshot saved: {captured_at}    Collector: {'sudo nvme smart-log' if use_sudo else 'nvme smart-log'}")
 
@@ -847,10 +852,10 @@ def cmd_disk_health_snapshot(path, snapshot_id):
     print(f"Model: {row['model'] or '-'}    Serial: {row['serial'] or '-'}    Firmware: {row['firmware'] or '-'}")
     print("=" * 114)
     warning_text = "none" if str(row["critical_warning"]) == "0" else row["critical_warning"]
-    print(f"Critical warning: {warning_text or 'not reported'}    Temperature: {nvme_display(row['temperature_c'])}°C    Available spare: {nvme_display(row['available_spare_percent'])}%")
-    print(f"Spare threshold: {nvme_display(row['spare_threshold_percent'])}%    Endurance used: {nvme_display(row['percentage_used'])}%    Media errors: {nvme_display(row['media_errors'])}")
-    print(f"Power-on hours: {nvme_display(row['power_on_hours'])}    Power cycles: {nvme_display(row['power_cycles'])}    Unsafe shutdowns: {nvme_display(row['unsafe_shutdowns'])}")
-    print(f"Data read: {human_bytes(read_bytes) if read_bytes is not None else 'not reported'}    Data written: {human_bytes(written_bytes) if written_bytes is not None else 'not reported'}    Error log entries: {nvme_display(row['error_log_entries'])}")
+    print_health_columns(("Critical warning", warning_text or "not reported"), ("Temperature", f"{nvme_display(row['temperature_c'])}°C"), ("Available spare", f"{nvme_display(row['available_spare_percent'])}%"))
+    print_health_columns(("Spare threshold", f"{nvme_display(row['spare_threshold_percent'])}%"), ("Endurance used", f"{nvme_display(row['percentage_used'])}%"), ("Media errors", nvme_display(row['media_errors'])))
+    print_health_columns(("Power-on hours", nvme_display(row['power_on_hours'])), ("Power cycles", nvme_display(row['power_cycles'])), ("Unsafe shutdowns", nvme_display(row['unsafe_shutdowns'])))
+    print_health_columns(("Data read", human_bytes(read_bytes) if read_bytes is not None else "not reported"), ("Data written", human_bytes(written_bytes) if written_bytes is not None else "not reported"), ("Error log entries", nvme_display(row['error_log_entries'])))
     print("=" * 114)
 
 
