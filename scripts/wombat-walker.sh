@@ -2367,8 +2367,11 @@ walk_filesystem() {
             s|S)
                 search_combined="off"
                 search_direct="off"
-                read -r -e -p "Enter search words: " search_words
-                [ -n "$search_words" ] || { echo "❌ Enter one or more search words."; continue; }
+                read -r -e -p "Enter search words (q to cancel): " search_words
+                case "$search_words" in
+                    q|Q) echo "Search cancelled."; continue ;;
+                    "") echo "Search cancelled."; continue ;;
+                esac
                 echo "Refreshing Walker's saved search index below: $current"
                 if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$current" little; then
                     echo "❌ Could not refresh this folder's search index. Search was cancelled."
