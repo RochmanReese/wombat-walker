@@ -2382,20 +2382,27 @@ walk_filesystem() {
                     2) search_scope="$current" ;;
                     3) search_scope="" ;;
                     4)
-                        read -r -e -p "Folder to search (q to cancel): " search_custom_folder
-                        case "$search_custom_folder" in q|Q|"") notice="Search cancelled."; continue ;; esac
-                        if [ "$search_custom_folder" = "~" ]; then
-                            search_custom_folder="$HOME"
-                        elif [[ "$search_custom_folder" == "~/"* ]]; then
-                            search_custom_folder="$HOME/${search_custom_folder#~/}"
-                        elif [[ "$search_custom_folder" != /* ]]; then
-                            search_custom_folder="$current/$search_custom_folder"
-                        fi
-                        if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
-                            notice="❌ Search folder is unavailable or cannot be read: $search_custom_folder"
+                        search_folder_choices=()
+                        echo "Choose a folder in: $search_folder_label"
+                        folder_number=1
+                        for search_folder_candidate in "${directories[@]}"; do
+                            search_folder_choices+=("$search_folder_candidate")
+                            printf "  [%d] %s\n" "$folder_number" "$(basename "$search_folder_candidate")"
+                            folder_number=$((folder_number + 1))
+                        done
+                        if [ "${#search_folder_choices[@]}" -eq 0 ]; then
+                            notice="❌ There are no folders to choose in: $current"
                             continue
                         fi
-                        search_scope="$(realpath "$search_custom_folder")"
+                        read -r -e -p "Folder number (q to cancel): " search_folder_choice
+                        case "$search_folder_choice" in
+                            q|Q|"") notice="Search cancelled."; continue ;;
+                        esac
+                        if ! [[ "$search_folder_choice" =~ ^[0-9]+$ ]] || [ "$search_folder_choice" -lt 1 ] || [ "$search_folder_choice" -gt "${#search_folder_choices[@]}" ]; then
+                            notice="❌ Enter one of the displayed folder numbers, or q to cancel."
+                            continue
+                        fi
+                        search_scope="$(realpath "${search_folder_choices[$((search_folder_choice - 1))]}")"
                         ;;
                     5) search_scope=""; search_combined="on" ;;
                     q|Q|"") notice="Search cancelled."; continue ;;
