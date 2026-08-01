@@ -2354,7 +2354,7 @@ walk_filesystem() {
                 ;;
             m|M)
                 read -r -e -p "Path: " manual_path
-                [ -e "$manual_path" ] || { echo "❌ That path does not exist."; continue; }
+                [ -e "$manual_path" ] || { echo "❌ That path does not exist. Press m first, then enter an absolute path beginning with /, such as /home/wombat."; continue; }
                 if [ -d "$manual_path" ]; then
                     back_history+=("$current"); current="$(realpath "$manual_path")"; page=0
                 elif [ -f "$manual_path" ] && [ ! -L "$manual_path" ]; then
@@ -2637,7 +2637,7 @@ walk_filesystem() {
                         echo "❌ This selection is not an ordinary regular file. Manage it outside Wombat Walker."
                     fi
                 else
-                    echo "❌ Enter a listed number, ., u, d, n, p, m, s, o, x, or q."
+                    echo "❌ Enter a listed number, ., u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
                 fi
                 ;;
         esac
