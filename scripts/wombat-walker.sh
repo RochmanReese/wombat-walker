@@ -547,7 +547,7 @@ docker_desktop_disk_summary() {
         [[ "$logical_bytes" =~ ^[0-9]+$ ]] || continue
         [[ "$allocated_blocks" =~ ^[0-9]+$ ]] || allocated_blocks=0
         allocated_bytes=$((allocated_blocks * 512))
-        printf "Docker Desktop virtual disk: %s capacity\nHost space allocated: %s" \
+        printf "Docker Desktop virtual disk: %s capacity       Host space allocated: %s" \
             "$(human_bytes "$logical_bytes")" "$(human_bytes "$allocated_bytes")"
         return 0
     done
@@ -1281,22 +1281,17 @@ docker_workspace() {
             fi
         fi
         echo
-        printf '%*s\n' 98 '' | tr ' ' '='
+        printf '%*s\n' 113 '' | tr ' ' '='
         echo "Wombat Walker — Docker filesystem explorer"
         echo "Docker Engine: running    Containers: $docker_container_count    Running: $docker_running_count    Exited: $docker_exited_count"
         if docker_desktop_disk_summary; then
             echo
-            echo "Unused virtual capacity does not currently consume host disk space."
+            printf "%-74s  Order: %s\n" "Unused virtual capacity does not currently consume host disk space." "$DOCKER_SORT_ORDER"
+        else
+            printf "%-74s  Order: %s\n" "" "$DOCKER_SORT_ORDER"
         fi
-        echo "Order: $DOCKER_SORT_ORDER"
-        printf '%*s\n' 98 '' | tr ' ' '='
-        echo
-        echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
-        echo "Bind mounts are ordinary host folders; named volumes are persistent Docker-managed storage."
-        echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
-        echo
-        printf '%*s Docker containers %*s\n' 39 '' 40 ''
-        printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
+        printf '%*s\n' 113 '' | tr ' ' '='
+        printf "  %-5s%-22s%-18s%-25s %12s  %12s   %12s\n" "No." "Container" "Status" "Image" "Layer" "Image/virtual" "Persistent"
         if [ "${#docker_lines[@]}" -eq 0 ]; then
             echo "  No Docker containers were found."
         fi
@@ -1313,17 +1308,19 @@ docker_workspace() {
             [ "${#docker_name}" -le 21 ] || docker_name="${docker_name:0:18}..."
             [ "${#docker_status}" -le 17 ] || docker_status="${docker_status:0:14}..."
             [ "${#docker_image}" -le 24 ] || docker_image="${docker_image:0:21}..."
-            printf "  %-5s%-22s%-18s%-25s %12s  %12s  %12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
+            printf "  %-5s%-22s%-18s%-25s %12s  %12s   %12s\n" "[$docker_choice]" "$docker_name" "$docker_status" "$docker_image" "$docker_writable" "$docker_virtual" "$docker_persistent"
             docker_choice=$((docker_choice + 1))
         done
+        printf '%*s\n' 113 '' | tr ' ' '='
+        echo "Saved Docker scans make filename/path search fast. They contain metadata only and never change containers or data."
+        echo "Containers are isolated applications. Select one to browse its live files or inspect where its data is stored."
         echo
-        printf "  %-31s%-31s%-31s%s\n" "[a] Scan all running containers" "[s] Search saved Docker scans" "" ""
-        printf "  %-31s%-31s%-31s%s\n" "[o] Change display order" "[r] Refresh container list" "[d] Calculate persistent data" "[q] Return to Walker"
-        printf "  %-31s%-31s%-31s%s\n" "[h] How Docker storage works" "" "" ""
+        printf "  %-36s%-36s%-36s%s\n" "[a] Scan all running containers" "[r] Refresh container list" "[k] manage docker scans" "[?] help"
+        printf "  %-36s%-36s%-36s%s\n" "[o] Change display order" "[s] Search saved Docker scans" "[d] Calculate persistent data" "[q] Walker"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
-            h|H) docker_help_screen; read -r -e -p "Press Enter to return to Docker containers. " _ ;;
+            h|H|\?) docker_help_screen; read -r -e -p "Press Enter to return to Docker containers. " _ ;;
             r|R) ;;
             d|D)
                 echo "Calculating writable named-volume and bind-mount data for running containers..."
