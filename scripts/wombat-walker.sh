@@ -1915,6 +1915,7 @@ fi
 
 walk_filesystem() {
     local current child choice manual_path index item_name display_name total_entries page page_size start_index end_index i
+    local -a all_entries
     local size_bytes allocated_bytes allocated_blocks size_needed folder_total_bytes folder_total_display modified_display record sort_choice target metric epoch history_index entry_kind sparse_info
     local cache_current cache_status cache_stale cache_total cache_path cache_size cache_allocated cache_index notice encryption_choice
     local search_words search_result_number cached_path managed_folder
@@ -2055,6 +2056,7 @@ walk_filesystem() {
 
         entries=("${directories[@]}" "${files[@]}")
         [ "${#entries[@]}" -gt 0 ] && sort_entries
+        all_entries=("${entries[@]}")
         total_entries="${#entries[@]}"
         if [ "$total_entries" -eq 0 ]; then page=0
         elif [ $((page * page_size)) -ge "$total_entries" ]; then page=$(((total_entries - 1) / page_size)); fi
@@ -2382,27 +2384,69 @@ walk_filesystem() {
                     2) search_scope="$current" ;;
                     3) search_scope="" ;;
                     4)
-                        search_folder_choices=()
-                        echo "Choose a folder in: $search_folder_label"
-                        folder_number=1
-                        for search_folder_candidate in "${directories[@]}"; do
-                            search_folder_choices+=("$search_folder_candidate")
-                            printf "  [%d] %s\n" "$folder_number" "$(basename "$search_folder_candidate")"
-                            folder_number=$((folder_number + 1))
-                        done
-                        if [ "${#search_folder_choices[@]}" -eq 0 ]; then
+                        search_folder_picker_entries=("${all_entries[@]}")
+                        search_folder_picker_page=0
+                        search_folder_picker_total="${#search_folder_picker_entries[@]}"
+                        if [ "$search_folder_picker_total" -eq 0 ]; then
                             notice="❌ There are no folders to choose in: $current"
                             continue
                         fi
-                        read -r -e -p "Folder number (q to cancel): " search_folder_choice
-                        case "$search_folder_choice" in
-                            q|Q|"") notice="Search cancelled."; continue ;;
-                        esac
-                        if ! [[ "$search_folder_choice" =~ ^[0-9]+$ ]] || [ "$search_folder_choice" -lt 1 ] || [ "$search_folder_choice" -gt "${#search_folder_choices[@]}" ]; then
-                            notice="❌ Enter one of the displayed folder numbers, or q to cancel."
-                            continue
-                        fi
-                        search_scope="$(realpath "${search_folder_choices[$((search_folder_choice - 1))]}")"
+                        while true; do
+                            search_folder_picker_start=$((search_folder_picker_page * page_size))
+                            search_folder_picker_end=$((search_folder_picker_start + page_size))
+                            [ "$search_folder_picker_end" -gt "$search_folder_picker_total" ] && search_folder_picker_end="$search_folder_picker_total"
+                            echo
+                            echo "=================================================================================================="
+                            echo "Choose a folder to search in: $current"
+                            echo "Order: $SORT_ORDER    Items per page: $page_size    Hidden: $SHOW_HIDDEN"
+                            echo "=================================================================================================="
+                            printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "No." "Type" "Name" "Logical size" "On disk" "Info" "Last updated"
+                            for ((search_folder_index=search_folder_picker_start; search_folder_index<search_folder_picker_end; search_folder_index++)); do
+                                search_folder_candidate="${search_folder_picker_entries[$search_folder_index]}"
+                                search_folder_name="$(basename "$search_folder_candidate")"
+                                if [ -d "$search_folder_candidate" ] && [ ! -L "$search_folder_candidate" ]; then search_folder_kind="dir"; else search_folder_kind="file"; fi
+                                [ "${#search_folder_name}" -le 32 ] || search_folder_name="${search_folder_name:0:29}..."
+                                measure_item "$search_folder_candidate"; modified_time "$search_folder_candidate"
+                                printf "  %-5s%-10s%-32s %12s  %12s  %-8s  %-16s\n" "[$((search_folder_index + 1))]" "$search_folder_kind" "$search_folder_name" "${size_cache[$search_folder_candidate]:-}" "${on_disk_cache[$search_folder_candidate]:-}" "" "${modified_cache[$search_folder_candidate]:-}"
+                            done
+                            echo
+                            [ "$search_folder_picker_end" -lt "$search_folder_picker_total" ] && printf "  %-34s" "[n] Next page"
+                            [ "$search_folder_picker_page" -gt 0 ] && printf "%-34s" "[p] Previous page"
+                            printf "%s\n" "[o] Change folder order    [q] Cancel"
+                            read -r -e -p "Choose a displayed folder number, n/p/o/q: " search_folder_choice
+                            case "$search_folder_choice" in
+                                q|Q|"") notice="Search cancelled."; break ;;
+                                n|N)
+                                    [ "$search_folder_picker_end" -lt "$search_folder_picker_total" ] && search_folder_picker_page=$((search_folder_picker_page + 1)) || notice="❌ This is the last folder page."
+                                    ;;
+                                p|P)
+                                    [ "$search_folder_picker_page" -gt 0 ] && search_folder_picker_page=$((search_folder_picker_page - 1)) || notice="❌ This is the first folder page."
+                                    ;;
+                                o|O)
+                                    echo "  [1] Alphabetical  [2] Largest first  [3] Smallest first  [4] Most recently updated"
+                                    read -r -e -p "> " search_folder_order_choice
+                                    case "$search_folder_order_choice" in
+                                        1) SORT_ORDER="alphabetical" ;; 2) SORT_ORDER="largest" ;; 3) SORT_ORDER="smallest" ;; 4) SORT_ORDER="updated" ;;
+                                        *) notice="❌ Enter 1, 2, 3, or 4."; continue ;;
+                                    esac
+                                    entries=("${search_folder_picker_entries[@]}")
+                                    sort_entries
+                                    search_folder_picker_entries=("${entries[@]}")
+                                    search_folder_picker_page=0
+                                    ;;
+                                *)
+                                    if ! [[ "$search_folder_choice" =~ ^[0-9]+$ ]] || [ "$search_folder_choice" -lt 1 ] || [ "$search_folder_choice" -gt "$search_folder_picker_total" ] || [ "$search_folder_choice" -lt $((search_folder_picker_start + 1)) ] || [ "$search_folder_choice" -gt "$search_folder_picker_end" ]; then
+                                        notice="❌ Enter a displayed folder number, n, p, o, or q."
+                                    elif [ ! -d "${search_folder_picker_entries[$((search_folder_choice - 1))]}" ] || [ -L "${search_folder_picker_entries[$((search_folder_choice - 1))]}" ]; then
+                                        notice="❌ That item is a file. Choose a row marked dir."
+                                    else
+                                        search_scope="$(realpath "${search_folder_picker_entries[$((search_folder_choice - 1))]}")"
+                                        break
+                                    fi
+                                    ;;
+                            esac
+                        done
+                        [ -n "$search_scope" ] || continue
                         ;;
                     5) search_scope=""; search_combined="on" ;;
                     q|Q|"") notice="Search cancelled."; continue ;;
