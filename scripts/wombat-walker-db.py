@@ -569,11 +569,22 @@ def cmd_list_mounts(_path):
             return "Device type unavailable"
         try:
             result = subprocess.run(
-                ["lsblk", "-no", "TYPE", source],
+                ["lsblk", "--bytes", "--json", "-o", "NAME,TYPE,SIZE,PKNAME"],
                 check=True, capture_output=True, text=True,
             )
-            kind = result.stdout.splitlines()[0].strip().lower()
-        except (OSError, subprocess.CalledProcessError, IndexError):
+            devices = list(flatten(json.loads(result.stdout).get("blockdevices", [])))
+            devices_by_name = {device.get("name"): device for device in devices}
+            device = devices_by_name.get(device_name)
+            if not device:
+                return path_fallback()
+            kind = (device.get("type") or "").lower()
+            if kind == "part":
+                parent = devices_by_name.get(device.get("pkname"))
+                partition_size = device.get("size") or 0
+                parent_size = parent.get("size") if parent else 0
+                if parent and parent.get("type") == "disk" and parent_size and partition_size / parent_size >= 0.99:
+                    return "Whole drive (single partition)"
+        except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, TypeError, ValueError):
             return path_fallback()
         labels = {
             "part": "Partition",
