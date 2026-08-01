@@ -733,13 +733,20 @@ def nvme_display(value, fallback="not reported"):
     return fallback if value is None else str(value)
 
 
+def nvme_temperature_c(value):
+    """nvme-cli JSON reports NVMe temperature in Kelvin; normalise it for Walker."""
+    if value is None:
+        return None
+    return int(value - 273.15) if value >= 273 else value
+
+
 def cmd_disk_health(path, device_path, use_sudo=False):
     check_parent(path)
     check_database(path)
     if not re.fullmatch(r"/dev/nvme\d+n\d+", device_path):
         fail("disk health is currently limited to a physical NVMe device such as /dev/nvme0n1")
-    # The long form works across nvme-cli releases that differ in positional parsing.
-    command = ["nvme", "smart-log", "--output-format=json", device_path]
+    # nvme-cli 2.8 requires its positional device before its output option.
+    command = ["nvme", "smart-log", device_path, "--output-format=json"]
     if use_sudo:
         command = ["sudo", "-n", *command]
     try:
@@ -755,7 +762,7 @@ def cmd_disk_health(path, device_path, use_sudo=False):
     if not record:
         fail(f"{device_path} is no longer a visible physical NVMe drive")
     critical_warning = nvme_value(health, "critical_warning")
-    temperature = nvme_value(health, "temperature")
+    temperature = nvme_temperature_c(nvme_value(health, "temperature"))
     available_spare = nvme_value(health, "avail_spare")
     spare_threshold = nvme_value(health, "spare_thresh")
     percentage_used = nvme_value(health, "percent_used")
