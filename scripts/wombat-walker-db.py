@@ -1484,16 +1484,14 @@ def cmd_scan(path, target, context):
     print()
     title = "Deep scan" if scope == "full" else "Targeted refresh"
     print(f"{title} {status}: {target}")
-    print(f"  Entries saved: {visited:,}")
+    print(f"  Entries saved: {visited:,}    Logical file size: {human_bytes(logical_total)}    Allocated disk space: {human_bytes(allocated_total)}    Time taken: {format_duration(elapsed)}")
     if scope == "targeted":
         print(f"  Cached root: {root} ({cached_count:,} entries; whole-root total needs refresh)")
-    print(f"  Logical file size: {human_bytes(logical_total)}")
-    print(f"  Allocated disk space: {human_bytes(allocated_total)}")
-    print(f"  Time taken: {format_duration(elapsed)}")
     if errors:
         print(f"  Unreadable paths: {len(errors):,} — this inventory is incomplete")
     else:
         print("  Unreadable paths: none — this inventory is complete")
+    print()
 
 
 def main():
