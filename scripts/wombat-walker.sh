@@ -1326,6 +1326,11 @@ docker_container_management_menu() {
     local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation management_footer_left management_footer_right docker_notice
     local -a docker_lines
     while true; do
+        if [ -n "$docker_notice" ]; then
+            echo "  $docker_notice"
+            echo
+            docker_notice=""
+        fi
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
         echo
         printf '%*s\n' 114 '' | tr ' ' '='
