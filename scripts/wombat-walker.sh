@@ -1362,11 +1362,16 @@ docker_container_management_menu() {
             continue
         fi
         IFS=$'\t' read -r docker_id docker_name docker_status docker_image docker_size <<< "${docker_lines[$((docker_choice - 1))]}"
+        docker_id_display="${docker_id:0:12}"
+        [ "${#docker_status}" -le 23 ] || docker_status="${docker_status:0:20}..."
+        [ "${#docker_image}" -le 34 ] || docker_image="${docker_image:0:31}..."
         while true; do
             docker_state="$(docker_lock_state "$docker_id" "$docker_status")"
             echo
-            echo "Container: $docker_name"
-            echo "Status: $docker_status    Safety: $docker_state"
+            printf '%*s\n' 114 '' | tr ' ' '='
+            echo "Container:  $docker_name  $docker_id"
+            printf "Id: %-12s    Status: %-23s  Image: %-34s  Safety Status: %s\n" "$docker_id_display" "$docker_status" "$docker_image" "$docker_state"
+            printf '%*s\n' 114 '' | tr ' ' '='
             echo
             echo "  [1] Start container"
             echo "  [2] Stop container"
@@ -1379,7 +1384,9 @@ docker_container_management_menu() {
             echo "  [5] View mounts and persistent data"
             echo "  [6] PURGE EVERYTHING for this container (permanent)"
             echo "  [7] Bulk remove stopped containers"
-            echo "  [b] Back to container list"
+            management_footer_left="  [number] select to manage"
+            management_footer_right="[b] Back to container list"
+            printf "%-*s%s\n" $((114 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
             read -r -e -p "> " confirmation
             case "$confirmation" in
                 b|B|q|Q|"") break ;;
