@@ -97,7 +97,7 @@ Inside Walker, the bottom of each view shows the available keys. The most common
 
 | Key | What it does |
 |---|---|
-| `.` | Shows the current folder path; in picker mode, returns it to the calling app. |
+| `.` | In picker mode, returns the current folder to the calling app. |
 | `u` / `d` | Go up one folder / return to the previous folder. |
 | `o` | Change folder display order. |
 | `s` | Choose a scope, refresh if needed, and search; refine results by size. |

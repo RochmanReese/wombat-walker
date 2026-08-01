@@ -75,7 +75,7 @@ walker_help_screen() {
     echo "====================== Wombat Walker help ======================"
     usage
     echo
-    echo "Browser keys: numbered item opens it; [.] selects this folder; [u] goes up;"
+    echo "Browser keys: numbered item opens it; [.] selects this folder in picker mode; [u] goes up;"
     echo "[d] returns to the previous folder; [n]/[p] change page; [o] changes order."
     echo "[m] enters a path; [s] refreshes and searches the current folder or saved scans; [x] opens utilities and this help; [q] quits."
     echo "Use --docker to open Docker directly: browse live container files, see where Docker stores"
@@ -2192,7 +2192,7 @@ walk_filesystem() {
         if [ "$PICK_FOLDER" = "on" ]; then
             dot_action="[.] Use this folder and return"
         else
-            dot_action="[.] Show current folder path"
+            dot_action="[!] Open shell in this folder"
         fi
         printf "  %-31s%-28s%-21s%s\n" "$dot_action" "[m] Type a path manually" "[u] Up one folder" "[x] Help & utilities"
         printf "  %-31s%-28s%-21s%s\n" "[o] Change display order" "[s] Search folders & files" "[d] Previous folder" "[q] Quit"
@@ -2211,6 +2211,14 @@ walk_filesystem() {
                     return 0
                 fi
                 notice="Current folder: $current"
+                ;;
+            '!')
+                echo "Opening a normal user shell in: $current"
+                echo "Type exit to return to Wombat Walker."
+                (
+                    cd "$current" || exit 1
+                    "${SHELL:-/bin/bash}"
+                )
                 ;;
             u|U) [ "$current" = "/" ] || { back_history+=("$current"); current="$(dirname "$current")"; page=0; } ;;
             d|D)
@@ -2703,7 +2711,7 @@ walk_filesystem() {
                         echo "❌ This selection is not an ordinary regular file. Manage it outside Wombat Walker."
                     fi
                 else
-                    notice="❌ Enter a listed number, ., u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
+                    notice="❌ Enter a listed number, ., !, u, d, n, p, m, s, o, x, or q. To enter a path, press m first, then start it with / (for example /home/wombat)."
                 fi
                 ;;
         esac
