@@ -555,10 +555,10 @@ def cmd_list_mounts(_path):
         except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
             return None
 
-    def source_device_kind(source):
-        """Describe the backing block device when the mount source is a local /dev path."""
+    def source_device_details(source):
+        """Describe the backing block device and its live connection when available."""
         if not source or not source.startswith("/dev/"):
-            return "Other source"
+            return "Other source", "Not a local block device"
         device_name = os.path.basename(source)
 
         def path_fallback():
@@ -569,32 +569,51 @@ def cmd_list_mounts(_path):
             return "Device type unavailable"
         try:
             result = subprocess.run(
-                ["lsblk", "--bytes", "--json", "-o", "NAME,TYPE,SIZE,PKNAME"],
+                ["lsblk", "--bytes", "--json", "-o", "NAME,TYPE,SIZE,PKNAME,TRAN,HOTPLUG"],
                 check=True, capture_output=True, text=True,
             )
             devices = list(flatten(json.loads(result.stdout).get("blockdevices", [])))
             devices_by_name = {device.get("name"): device for device in devices}
             device = devices_by_name.get(device_name)
             if not device:
-                return path_fallback()
+                return path_fallback(), "Connection unavailable"
             kind = (device.get("type") or "").lower()
+            backing_device = device
             if kind == "part":
                 parent = devices_by_name.get(device.get("pkname"))
                 partition_size = device.get("size") or 0
                 parent_size = parent.get("size") if parent else 0
                 if parent and parent.get("type") == "disk" and parent_size and partition_size / parent_size >= 0.99:
-                    return "Whole drive (single partition)"
+                    kind_label = "Whole drive (single partition)"
+                else:
+                    kind_label = "Partition"
+                backing_device = parent or device
+            else:
+                labels = {
+                    "disk": "Disk",
+                    "lvm": "Logical volume",
+                    "crypt": "Encrypted mapping",
+                    "loop": "Loop device",
+                    "rom": "Optical device",
+                }
+                kind_label = labels.get(kind, kind or path_fallback())
         except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, TypeError, ValueError):
-            return path_fallback()
-        labels = {
-            "part": "Partition",
-            "disk": "Disk",
-            "lvm": "Logical volume",
-            "crypt": "Encrypted mapping",
-            "loop": "Loop device",
-            "rom": "Optical device",
-        }
-        return labels.get(kind, kind or path_fallback())
+            return path_fallback(), "Connection unavailable"
+
+        transport = (backing_device.get("tran") or "").lower()
+        if transport == "usb":
+            connection = "USB"
+        elif transport == "nvme":
+            connection = "Internal NVMe"
+        elif transport in {"ata", "sata"}:
+            connection = "Internal SATA"
+        elif transport:
+            connection = transport.upper()
+        elif backing_device.get("hotplug"):
+            connection = "Removable"
+        else:
+            connection = "Connection unavailable"
+        return kind_label, connection
 
     # `findmnt --json` represents nested mount points as children.  Keep only a
     # filesystem's real root, which removes bind mounts such as /tmp and the
@@ -607,12 +626,14 @@ def cmd_list_mounts(_path):
         source = mount.get("source")
         print(f"{clipped(target, 40):<40}  {clipped(mount.get('source'), 20):<20}  {clipped(mount.get('fstype'), 8):<8}  {clipped(mount.get('uuid'), 37):<37}  {mount.get('label') or '-'}")
         usage = filesystem_usage(target)
-        device_kind = source_device_kind(source)
+        device_kind, connection = source_device_details(source)
         if usage:
             total, used, available, percent = usage
-            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent:<5}  Device: {device_kind}")
+            print(f"Total size: {human_bytes(total):<12}  Used: {human_bytes(used):<12}  Free: {human_bytes(available):<12}  Used %: {percent:<5}  Device: {device_kind}    Connection: {connection}")
         else:
-            print(f"Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable    Device: {device_kind}")
+            print(f"Total size: unavailable    Used: unavailable    Free: unavailable    Used %: unavailable    Device: {device_kind}    Connection: {connection}")
+        if target and len(target) > 40:
+            print(f"Full mount path: {target}")
         print()
 
 
