@@ -1323,7 +1323,7 @@ docker_purge_container_resources() {
 }
 
 docker_container_management_menu() {
-    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation
+    local docker_choice docker_line docker_id docker_id_display docker_name docker_status docker_image docker_size docker_state confirmation management_footer_left management_footer_right
     local -a docker_lines
     while true; do
         mapfile -t docker_lines < <(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Size}}' 2>/dev/null)
@@ -1350,8 +1350,9 @@ docker_container_management_menu() {
             docker_choice=$((docker_choice + 1))
         done
         printf '%*s\n' 114 '' | tr ' ' '='
-        echo
-        echo "  [q] Return to Docker list"
+        management_footer_left="  [number] select to manage a container"
+        management_footer_right="[q] Return to Docker list"
+        printf "%-*s%s\n" $((114 - ${#management_footer_right})) "$management_footer_left" "$management_footer_right"
         read -r -e -p "> " docker_choice
         case "$docker_choice" in
             q|Q|"") return 0 ;;
