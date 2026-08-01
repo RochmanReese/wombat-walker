@@ -950,7 +950,7 @@ def search_order_sql(order, table="entries", fts_table=None):
     return orders[order]
 
 
-def docker_search_rows(conn, words, limit, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
+def docker_search_rows(conn, words, limit, offset=0, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
     tokens = search_tokens(words)
     query = fts_query(tokens)
     sql = """
@@ -986,18 +986,18 @@ def docker_search_rows(conn, words, limit, container_id=None, path_prefix=None, 
         """SELECT containers.container_id, containers.name, entries.entry_type, entries.logical_size_bytes,
                   entries.allocated_size_bytes, entries.mtime_ns, entries.container_path,
                   mounts.mount_type, mounts.volume_name, runs.finished_at, runs.status
-           """ + sql + f" ORDER BY {search_order_sql(order, fts_table='docker_path_search')} LIMIT ?", [*args, limit],
+           """ + sql + f" ORDER BY {search_order_sql(order, fts_table='docker_path_search')} LIMIT ? OFFSET ?", [*args, limit, offset],
     ).fetchall()
     return rows, total
 
 
-def cmd_docker_search(path, words, limit, container_id=None, path_prefix=None, order="relevance"):
+def cmd_docker_search(path, words, limit, offset=0, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if not 1 <= limit <= 10000:
         fail("Docker search limit must be between 1 and 10000")
     conn = connect(path)
-    rows, total = docker_search_rows(conn, words, limit, container_id, path_prefix, order)
+    rows, total = docker_search_rows(conn, words, limit, offset, container_id, path_prefix, order, min_size, max_size)
     if not rows:
         print(f"No saved Docker paths match: {words!r}")
         conn.close(); return
@@ -1010,7 +1010,7 @@ def cmd_docker_search(path, words, limit, container_id=None, path_prefix=None, o
         print("Scope: all saved Docker containers")
     print(f"Found {total:,} matching saved paths. Order: {order}. Stale container inventories are hidden.")
     last_group = None
-    for number, row in enumerate(rows, 1):
+    for number, row in enumerate(rows, offset + 1):
         container_id, container_name, entry_type, logical, allocated, mtime_ns, entry_path, mount_type, volume_name, finished_at, status = row
         storage = volume_name or (mount_type or "container layer")
         group = (container_id, storage, finished_at, status)
@@ -1022,22 +1022,22 @@ def cmd_docker_search(path, words, limit, container_id=None, path_prefix=None, o
             print(f"{'No.':<5}{'Type':<10}{'Logical size':>12}  {'On disk':>12}  Path")
             last_group = group
         print(f"[{number}]".ljust(5) + f"{entry_type:<10}{human_bytes(logical or 0):>12}  {human_bytes(allocated or 0):>12}  {entry_path}")
-    if total > len(rows):
-        print(f"\nShowing first {len(rows):,} of {total:,} results. Use a higher search limit to display more.")
+    if total > offset + len(rows):
+        print(f"\nShowing {offset + 1:,}-{offset + len(rows):,} of {total:,} results.")
     conn.close()
 
 
-def cmd_docker_search_path(path, words, number, container_id=None, path_prefix=None, order="relevance"):
+def cmd_docker_search_path(path, words, number, container_id=None, path_prefix=None, order="relevance", min_size=None, max_size=None):
     check_parent(path)
     check_database(path)
     if number < 1:
         fail("Docker search result number must be positive")
     conn = connect(path)
-    rows, _ = docker_search_rows(conn, words, 10000, container_id, path_prefix, order)
-    if number > len(rows):
+    rows, total = docker_search_rows(conn, words, 1, number - 1, container_id, path_prefix, order, min_size, max_size)
+    if number > total or not rows:
         conn.close()
         fail("Docker search result number is outside the displayed results")
-    container_id, container_name, entry_type, _, _, _, entry_path, *_ = rows[number - 1]
+    container_id, container_name, entry_type, _, _, _, entry_path, *_ = rows[0]
     output = sys.stdout.buffer
     for value in (container_id, container_name, entry_type, entry_path):
         output.write(value.encode("utf-8", "surrogateescape") + b"\0")
@@ -1050,7 +1050,7 @@ def combined_search_rows(conn, words, limit, offset=0, order="relevance", min_si
     # source, so limit + offset from each source is sufficient.
     fetch_limit = min(10000, limit + offset)
     host_rows, _, host_total = search_rows(conn, words, "-", fetch_limit, 0, None, order, False, min_size, max_size)
-    docker_rows, docker_total = docker_search_rows(conn, words, fetch_limit, None, None, order, min_size, max_size)
+    docker_rows, docker_total = docker_search_rows(conn, words, fetch_limit, 0, None, None, order, min_size, max_size)
     rows = []
     for entry_type, logical, mtime_ns, entry_path, root_path, status, scanned_at in host_rows:
         rows.append(("host", entry_type, logical or 0, mtime_ns or 0, root_path, entry_path, "", "", status, scanned_at))
@@ -1572,15 +1572,24 @@ def main():
             cmd_docker_session_summary(path, sys.argv[3])
         elif sys.argv[1] == "docker-folder-total" and len(sys.argv) == 5:
             cmd_docker_folder_total(path, sys.argv[3], sys.argv[4])
-        elif sys.argv[1] == "docker-search" and len(sys.argv) in {4, 5, 7, 8}:
+        elif sys.argv[1] == "docker-search" and len(sys.argv) in {4, 5, 7, 8, 9, 10, 11}:
             limit = int(sys.argv[4]) if len(sys.argv) == 5 else 100
-            if len(sys.argv) in {7, 8}:
+            if len(sys.argv) >= 9:
                 limit = int(sys.argv[4])
-                cmd_docker_search(path, sys.argv[3], limit, None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
+                min_size = parse_size_filter(sys.argv[9]) if len(sys.argv) >= 10 else None
+                max_size = parse_size_filter(sys.argv[10]) if len(sys.argv) >= 11 else None
+                cmd_docker_search(path, sys.argv[3], limit, int(sys.argv[5]), None if sys.argv[6] == "-" else sys.argv[6], None if sys.argv[7] == "-" else sys.argv[7], sys.argv[8], min_size, max_size)
+            elif len(sys.argv) in {7, 8}:
+                limit = int(sys.argv[4])
+                cmd_docker_search(path, sys.argv[3], limit, 0, None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
             else:
                 cmd_docker_search(path, sys.argv[3], limit)
-        elif sys.argv[1] == "docker-search-path" and len(sys.argv) in {5, 7, 8}:
-            if len(sys.argv) in {7, 8}:
+        elif sys.argv[1] == "docker-search-path" and len(sys.argv) in {5, 7, 8, 9, 10}:
+            if len(sys.argv) >= 9:
+                min_size = parse_size_filter(sys.argv[8]) if len(sys.argv) >= 9 else None
+                max_size = parse_size_filter(sys.argv[9]) if len(sys.argv) >= 10 else None
+                cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]), None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7], min_size, max_size)
+            elif len(sys.argv) in {7, 8}:
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]), None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
             else:
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]))

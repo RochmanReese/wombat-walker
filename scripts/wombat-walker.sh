@@ -1118,7 +1118,7 @@ browse_docker_container() {
 }
 
 docker_search_menu() {
-    local docker_search_words docker_result_number docker_result_path docker_result_parent docker_scope_choice docker_search_order docker_search_order_choice
+    local docker_search_words docker_result_number docker_result_path docker_result_parent docker_scope_choice docker_search_order docker_search_order_choice docker_refresh_choice docker_running docker_refresh_path docker_search_offset docker_search_min_size docker_search_max_size
     local scoped_container="${1:--}" scoped_name="${2:-}" scoped_folder="${3:--}"
     local -a docker_result_fields
     if [ "$scoped_container" != "-" ]; then
@@ -1139,19 +1139,53 @@ docker_search_menu() {
     else
         scoped_folder="-"
     fi
-    read -r -e -p "Search saved Docker paths: " docker_search_words
-    [ -n "$docker_search_words" ] || { echo "❌ Enter one or more search words."; return 0; }
+    if [ "$scoped_container" != "-" ]; then
+        docker_running="$(docker inspect "$scoped_container" --format '{{.State.Running}}' 2>/dev/null || true)"
+        if [ "$docker_running" = "true" ]; then
+            read -r -e -p "Refresh this container's saved search index before searching? [Y/n] " docker_refresh_choice
+            case "$docker_refresh_choice" in
+                n|N|no|NO) ;;
+                *)
+                    docker_refresh_path="$scoped_folder"
+                    [ "$docker_refresh_path" = "-" ] && docker_refresh_path="/"
+                    echo "Refreshing saved Docker search index for: ${scoped_name:-$scoped_container}"
+                    if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-scan "$WALKER_DATABASE" "$scoped_container" "$docker_refresh_path"; then
+                        echo "❌ Could not refresh this container's search index. Search was cancelled."
+                        return 0
+                    fi
+                    ;;
+            esac
+        else
+            echo "This container is not running, so its saved search index cannot be refreshed."
+        fi
+    else
+        read -r -e -p "Refresh all running containers before searching? [Y/n] " docker_refresh_choice
+        case "$docker_refresh_choice" in
+            n|N|no|NO) ;;
+            *) docker_scan_all_running ;;
+        esac
+    fi
+    read -r -e -p "Enter Docker search words (q to cancel): " docker_search_words
+    case "$docker_search_words" in q|Q|"") return 0 ;; esac
     docker_search_order="relevance"
+    docker_search_offset=0
+    docker_search_min_size=""
+    docker_search_max_size=""
     while true; do
         echo
-        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-search "$WALKER_DATABASE" "$docker_search_words" "$SEARCH_LIMIT" "$scoped_container" "$scoped_folder" "$docker_search_order"; then
+        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-search "$WALKER_DATABASE" "$docker_search_words" "$SEARCH_LIMIT" "$docker_search_offset" "$scoped_container" "$scoped_folder" "$docker_search_order" "$docker_search_min_size" "$docker_search_max_size"; then
             echo "❌ Docker saved-search request failed."
             return 0
         fi
-        echo "  [o] Change result order    [q] Return"
-        read -r -e -p "Open result number, or choose o/q: " docker_result_number
+        echo "  [n] Next page    [p] Previous page    [o] Change result order    [f] Refine search    [r] New search words    [q] Return"
+        read -r -e -p "Open result number, or choose n/p/o/f/r/q: " docker_result_number
         case "$docker_result_number" in
             q|Q|"") return 0 ;;
+            n|N) docker_search_offset=$((docker_search_offset + SEARCH_LIMIT)); continue ;;
+            p|P)
+                if [ "$docker_search_offset" -ge "$SEARCH_LIMIT" ]; then docker_search_offset=$((docker_search_offset - SEARCH_LIMIT)); else echo "❌ This is the first search-results page."; fi
+                continue
+                ;;
             o|O)
                 echo "  [1] Search relevance  [2] Largest first  [3] Smallest first  [4] Most recently updated"
                 read -r -e -p "> " docker_search_order_choice
@@ -1160,15 +1194,28 @@ docker_search_menu() {
                     3) docker_search_order="smallest" ;; 4) docker_search_order="updated" ;;
                     *) echo "❌ Enter 1, 2, 3, or 4." ;;
                 esac
+                docker_search_offset=0
+                continue
+                ;;
+            f|F)
+                read -r -e -p "Minimum logical size (blank for none, e.g. 100MB): " docker_search_min_size
+                read -r -e -p "Maximum logical size (blank for none): " docker_search_max_size
+                docker_search_offset=0
+                continue
+                ;;
+            r|R)
+                read -r -e -p "Enter new Docker search words (q to cancel): " docker_search_words
+                case "$docker_search_words" in q|Q|"") return 0 ;; esac
+                docker_search_min_size=""; docker_search_max_size=""; docker_search_offset=0
                 continue
                 ;;
         esac
-        if ! [[ "$docker_result_number" =~ ^[0-9]+$ ]]; then
-            echo "❌ Enter a result number, o, or q."
+        if ! [[ "$docker_result_number" =~ ^[0-9]+$ ]] || [ "$docker_result_number" -le "$docker_search_offset" ] || [ "$docker_result_number" -gt $((docker_search_offset + SEARCH_LIMIT)) ]; then
+            echo "❌ Enter a result number shown on this page, n, p, o, f, r, or q."
             continue
         fi
         docker_result_fields=()
-        mapfile -d '' -t docker_result_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-search-path "$WALKER_DATABASE" "$docker_search_words" "$docker_result_number" "$scoped_container" "$scoped_folder" "$docker_search_order" 2>/dev/null || true)
+        mapfile -d '' -t docker_result_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" docker-search-path "$WALKER_DATABASE" "$docker_search_words" "$docker_result_number" "$scoped_container" "$scoped_folder" "$docker_search_order" "$docker_search_min_size" "$docker_search_max_size" 2>/dev/null || true)
         if [ "${#docker_result_fields[@]}" -ne 4 ]; then
             echo "❌ That result is outside the displayed Docker search results."
             continue
