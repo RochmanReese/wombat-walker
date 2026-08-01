@@ -1284,7 +1284,9 @@ docker_purge_container_resources() {
     docker_image="$(docker inspect --format '{{.Config.Image}}' "$docker_id" 2>/dev/null || true)"
     mapfile -t docker_mounts < <(docker inspect --format '{{range .Mounts}}{{.Type}}\t{{.Name}}\t{{.Destination}}{{"\n"}}{{end}}' "$docker_id" 2>/dev/null)
     docker_volumes=()
-    echo "This permanently removes the selected container and its unused Docker-managed resources:"
+    echo "⚠️  PURGE IS PERMANENT — GONE IS GONE"
+    echo "This permanently removes the selected container and its unused Docker-managed resources."
+    echo "This cannot be undone. Approach with caution."
     echo "  Container: $docker_name"
     echo "  Image: ${docker_image:-unknown} (only if no other container uses it)"
     for docker_mount in "${docker_mounts[@]}"; do
@@ -1296,7 +1298,8 @@ docker_purge_container_resources() {
             echo "  Preserved bind mount: $docker_destination"
         fi
     done
-    echo "Host bind-mounted folders will not be deleted."
+    echo "⚠️  Bind-mounted host folders will not be deleted by Walker, but purging this container"
+    echo "    may affect the application’s access to those folders or leave their data orphaned."
     read -r -e -p "Type PURGE $docker_name to permanently continue: " confirmation
     [ "$confirmation" = "PURGE $docker_name" ] || { echo "Purge cancelled."; return 0; }
     docker stop "$docker_id" >/dev/null 2>&1 || true
@@ -1370,8 +1373,8 @@ docker_container_management_menu() {
                 echo "  [4] Lock container"
             fi
             echo "  [5] View mounts and persistent data"
-            echo "  [6] Purge this container and unused resources"
-            echo "  [7] Purge all unlocked stopped containers"
+            echo "  [6] PURGE EVERYTHING for this container (permanent)"
+            echo "  [7] Bulk remove stopped containers"
             echo "  [b] Back to container list"
             read -r -e -p "> " confirmation
             case "$confirmation" in
