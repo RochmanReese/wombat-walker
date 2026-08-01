@@ -1001,6 +1001,7 @@ def cmd_docker_search(path, words, limit, offset=0, container_id=None, path_pref
     if not rows:
         print(f"No saved Docker paths match: {words!r}")
         conn.close(); return
+    print("=" * 114)
     print(f"Docker search: {words!r}")
     if path_prefix:
         print(f"Scope: container folder {path_prefix}")
