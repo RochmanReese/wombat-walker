@@ -2366,6 +2366,7 @@ walk_filesystem() {
                 ;;
             s|S)
                 search_combined="off"
+                search_direct="off"
                 read -r -e -p "Enter search words: " search_words
                 [ -n "$search_words" ] || { echo "❌ Enter one or more search words."; continue; }
                 echo "Refreshing Walker's saved search index below: $current"
@@ -2373,15 +2374,17 @@ walk_filesystem() {
                     echo "❌ Could not refresh this folder's search index. Search was cancelled."
                     continue
                 fi
-                echo "  [1] Search this folder and its descendants (just refreshed): $current"
-                echo "  [2] Search every saved host-folder scan"
-                echo "  [3] Search another folder (refresh it first)"
-                echo "  [4] Search saved host and Docker scans"
+                echo "  [1] Search this folder"
+                echo "  [2] Deep search all files and folders in this folder"
+                echo "  [3] Search every saved host-folder scan"
+                echo "  [4] Search another folder (refresh it first)"
+                echo "  [5] Search saved host and Docker scans"
                 read -r -e -p "> " search_scope_choice
                 case "$search_scope_choice" in
-                    1) search_scope="$current" ;;
-                    2) search_scope="" ;;
-                    3)
+                    1) search_scope="$current"; search_direct="on" ;;
+                    2) search_scope="$current" ;;
+                    3) search_scope="" ;;
+                    4)
                         read -r -e -p "Folder to refresh and search: " search_custom_folder
                         [ -n "$search_custom_folder" ] || { echo "❌ Enter a folder path."; continue; }
                         if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
@@ -2395,8 +2398,8 @@ walk_filesystem() {
                             continue
                         fi
                         ;;
-                    4) search_scope=""; search_combined="on" ;;
-                    *) echo "❌ Enter 1, 2, 3, or 4."; continue ;;
+                    5) search_scope=""; search_combined="on" ;;
+                    *) echo "❌ Enter 1, 2, 3, 4, or 5."; continue ;;
                 esac
                 search_offset=0
                 search_order="relevance"
@@ -2404,6 +2407,8 @@ walk_filesystem() {
                     echo
                     if [ "$search_combined" = "on" ]; then
                         python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search "$WALKER_DATABASE" "$search_words" "$SEARCH_LIMIT" "$search_offset" "$search_order" || break
+                    elif [ "$search_direct" = "on" ]; then
+                        python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" || break
                     elif [ -n "$search_scope" ]; then
                         python3 "$SCRIPT_DIR/wombat-walker-db.py" search "$WALKER_DATABASE" "$search_words" - "$SEARCH_LIMIT" "$search_offset" "$search_scope" "$search_order" || break
                     else
@@ -2438,6 +2443,8 @@ walk_filesystem() {
                         combined_result_fields=()
                         mapfile -d '' -t combined_result_fields < <(python3 "$SCRIPT_DIR/wombat-walker-db.py" combined-search-path "$WALKER_DATABASE" "$search_words" "$search_result_number" "$search_order" 2>/dev/null || true)
                         cached_path="${combined_result_fields[4]:-}"
+                    elif [ "$search_direct" = "on" ]; then
+                        cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-direct-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" 2>/dev/null || true)"
                     elif [ -n "$search_scope" ]; then
                         cached_path="$(python3 "$SCRIPT_DIR/wombat-walker-db.py" search-path "$WALKER_DATABASE" "$search_words" - "$search_result_number" "$search_scope" "$search_order" 2>/dev/null || true)"
                     else

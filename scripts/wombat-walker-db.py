@@ -1123,7 +1123,7 @@ def fts_query(tokens):
     return " AND ".join('"' + token.replace('"', '""') + '"*' for token in tokens)
 
 
-def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="relevance"):
+def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False):
     root_id = None
     if root != "-":
         row = conn.execute("SELECT id FROM scan_roots WHERE root_path=?", (root,)).fetchone()
@@ -1150,7 +1150,12 @@ def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="rel
         args.append(root_id)
     if path_prefix:
         path_prefix = database_path_text(os.path.realpath(path_prefix))
-        if path_prefix == "/":
+        if direct_only and path_prefix == "/":
+            sql += " AND entries.path LIKE '/%' AND instr(substr(entries.path, 2), '/')=0"
+        elif direct_only:
+            sql += " AND substr(entries.path, 1, length(?)+1)=? || '/' AND instr(substr(entries.path, length(?)+2), '/')=0"
+            args.extend([path_prefix, path_prefix, path_prefix])
+        elif path_prefix == "/":
             # The normal descendant expression appends '/', which would turn the root prefix
             # into '//' and exclude every absolute path.
             sql += " AND entries.path LIKE '/%'"
@@ -1166,7 +1171,7 @@ def search_rows(conn, words, root, limit, offset=0, path_prefix=None, order="rel
     return rows, root_id, total
 
 
-def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="relevance"):
+def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="relevance", direct_only=False):
     check_parent(path)
     check_database(path)
     if not 1 <= limit <= 10000:
@@ -1174,10 +1179,11 @@ def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="rele
     if offset < 0:
         fail("search offset cannot be negative")
     conn = connect(path)
-    rows, root_id, total = search_rows(conn, words, root, limit, offset, path_prefix, order)
+    rows, root_id, total = search_rows(conn, words, root, limit, offset, path_prefix, order, direct_only)
     scope = root if root_id is not None else "all saved scans"
     if path_prefix:
-        scope += f" below {os.path.realpath(path_prefix)}"
+        relation = " directly in" if direct_only else " below"
+        scope += f"{relation} {os.path.realpath(path_prefix)}"
     print(f"Search: {words!r}    Scope: {scope}    Order: {order}")
     if not rows:
         print("No matching cached paths.")
@@ -1203,13 +1209,13 @@ def cmd_search(path, words, root, limit, offset=0, path_prefix=None, order="rele
     conn.close()
 
 
-def cmd_search_path(path, words, root, number, path_prefix=None, order="relevance"):
+def cmd_search_path(path, words, root, number, path_prefix=None, order="relevance", direct_only=False):
     check_parent(path)
     check_database(path)
     if number < 1 or number > 10000:
         fail("search result number must be between 1 and 10000")
     conn = connect(path)
-    rows, _, _ = search_rows(conn, words, root, number, 0, path_prefix, order)
+    rows, _, _ = search_rows(conn, words, root, number, 0, path_prefix, order, direct_only)
     if len(rows) < number:
         fail("search result number is outside the result list")
     sys.stdout.buffer.write(filesystem_path_text(rows[number - 1][3]).encode("utf-8", "surrogateescape"))
@@ -1491,7 +1497,7 @@ def cmd_scan(path, target, context):
 
 
 def main():
-    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-path", "combined-search", "combined-search-path"}:
+    if len(sys.argv) not in {3, 4, 5, 6, 7, 8, 9, 10} or sys.argv[1] not in {"init", "status", "scan", "show", "list", "set-policy", "cached-sizes", "mark-stale", "operation-log", "operation-list", "set-encryption", "remove-encryption", "list-encryption", "list-mounts", "docker-inventory", "docker-scan", "docker-search", "docker-search-path", "search", "search-direct", "search-path", "search-direct-path", "combined-search", "combined-search-path"}:
         print(__doc__, file=sys.stderr)
         return 1
     try:
@@ -1547,13 +1553,13 @@ def main():
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]), None if sys.argv[5] == "-" else sys.argv[5], None if sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
             else:
                 cmd_docker_search_path(path, sys.argv[3], int(sys.argv[4]))
-        elif sys.argv[1] == "search" and len(sys.argv) in {5, 6, 7, 8, 9}:
+        elif sys.argv[1] in {"search", "search-direct"} and len(sys.argv) in {5, 6, 7, 8, 9}:
             limit = int(sys.argv[5]) if len(sys.argv) >= 6 else 100
             offset = int(sys.argv[6]) if len(sys.argv) >= 7 else 0
             path_prefix = None if len(sys.argv) < 8 or sys.argv[7] == "-" else sys.argv[7]
-            cmd_search(path, sys.argv[3], sys.argv[4], limit, offset, path_prefix, sys.argv[8] if len(sys.argv) == 9 else "relevance")
-        elif sys.argv[1] == "search-path" and len(sys.argv) in {6, 7, 8}:
-            cmd_search_path(path, sys.argv[3], sys.argv[4], int(sys.argv[5]), None if len(sys.argv) < 7 or sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance")
+            cmd_search(path, sys.argv[3], sys.argv[4], limit, offset, path_prefix, sys.argv[8] if len(sys.argv) == 9 else "relevance", sys.argv[1] == "search-direct")
+        elif sys.argv[1] in {"search-path", "search-direct-path"} and len(sys.argv) in {6, 7, 8}:
+            cmd_search_path(path, sys.argv[3], sys.argv[4], int(sys.argv[5]), None if len(sys.argv) < 7 or sys.argv[6] == "-" else sys.argv[6], sys.argv[7] if len(sys.argv) == 8 else "relevance", sys.argv[1] == "search-direct-path")
         elif sys.argv[1] == "combined-search" and len(sys.argv) in {4, 5, 6, 7}:
             cmd_combined_search(path, sys.argv[3], int(sys.argv[4]) if len(sys.argv) >= 5 else 100, int(sys.argv[5]) if len(sys.argv) >= 6 else 0, sys.argv[6] if len(sys.argv) == 7 else "relevance")
         elif sys.argv[1] == "combined-search-path" and len(sys.argv) in {5, 6}:
