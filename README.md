@@ -17,8 +17,8 @@ another application.
 
 - 📁 **Readable filesystem browsing** — files, folders, sizes, allocated disk space, dates, paging,
   hidden-file control, search, and remembered display preferences.
-- 🔎 **Fast saved-scan search** — scan once, then search filenames and paths without repeatedly
-  crawling a large disk. Search a folder, every saved filesystem scan, Docker scans, or both together.
+- 🔎 **Truthful folder search** — search filenames and paths in the current folder after Walker refreshes
+  its metadata, or search the wider saved filesystem and Docker inventories.
 - 🧹 **Careful cleanup** — preview files and recoverable Wombat Trash actions before deleting host
   data; move, copy, rename, and create folders with destination and overwrite guards.
 - ✏️ **Safe editing** — inspect a regular file, choose Nano/Vim/system editor, and return directly
@@ -100,7 +100,7 @@ Inside Walker, the bottom of each view shows the available keys. The most common
 | `.` | Shows the current folder path; in picker mode, returns it to the calling app. |
 | `u` / `d` | Go up one folder / return to the previous folder. |
 | `o` | Change folder display order. |
-| `s` | Search folders and files from saved scans. |
+| `s` | Refresh and search the current folder, another chosen folder, or saved inventories. |
 | `x` | Open Help & utilities: Docker, mounts, scan refresh, cleanup, preferences, help, and shell. |
 | `!` | Open a normal shell in the current folder; type `exit` to return. |
 | `q` | Return or quit safely. |
@@ -111,11 +111,14 @@ A live folder listing is immediate. A **saved scan** is optional metadata—path
 timestamps—not file contents. It makes later searches fast and is especially valuable on archive
 drives or large Docker installations.
 
-Use Utilities → **Update saved scan below this folder** when you deliberately want an inventory.
-Then use **Search folders & files** to search the current folder, all saved host scans, or a combined
-host-and-Docker view. Search results can be sorted alphabetically, by logical size, or by last
-modified date. A search for an Ollama model name may not find its large weight blobs because Ollama
-stores them as SHA-256 filenames; browse the blobs folder and sort by size instead.
+When you choose **Search folders & files**, Walker first refreshes the current folder and its
+descendants, so that scope includes files currently visible in the browser. You can then search
+that refreshed folder, refresh and search another chosen folder, search every saved host scan, or
+search a combined host-and-Docker view. Utilities → **Update saved scan below this folder** remains
+available when you want to refresh an inventory without searching. Search results can be sorted
+alphabetically, by logical size, or by last modified date. A search for an Ollama model name may
+not find its large weight blobs because Ollama stores them as SHA-256 filenames; browse the blobs
+folder and sort by size instead.
 
 ## 🛡️ Safety model
 

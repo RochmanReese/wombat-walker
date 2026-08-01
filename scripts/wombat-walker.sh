@@ -77,7 +77,7 @@ walker_help_screen() {
     echo
     echo "Browser keys: numbered item opens it; [.] selects this folder; [u] goes up;"
     echo "[d] returns to the previous folder; [n]/[p] change page; [o] changes order."
-    echo "[m] enters a path; [s] searches saved scans; [x] opens utilities and this help; [q] quits."
+    echo "[m] enters a path; [s] refreshes and searches the current folder or saved scans; [x] opens utilities and this help; [q] quits."
     echo "Use --docker to open Docker directly: browse live container files, see where Docker stores"
     echo "its data, and save fast searchable file/path inventories without changing a container."
     echo "In Docker, [a] scans all running containers after confirmation; stopped containers are skipped."
@@ -2368,15 +2368,35 @@ walk_filesystem() {
                 search_combined="off"
                 read -r -e -p "Search saved paths: " search_words
                 [ -n "$search_words" ] || { echo "❌ Enter one or more search words."; continue; }
-                echo "  [1] Search this folder and its descendants: $current"
-                echo "  [2] Search every saved scan"
-                echo "  [3] Search filesystem and saved Docker scans"
+                echo "Refreshing Walker's saved search index below: $current"
+                if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$current" little; then
+                    echo "❌ Could not refresh this folder's search index. Search was cancelled."
+                    continue
+                fi
+                echo "  [1] Search this folder and its descendants (just refreshed): $current"
+                echo "  [2] Search every saved host-folder scan"
+                echo "  [3] Search another folder (refresh it first)"
+                echo "  [4] Search saved host and Docker scans"
                 read -r -e -p "> " search_scope_choice
                 case "$search_scope_choice" in
                     1) search_scope="$current" ;;
                     2) search_scope="" ;;
-                    3) search_scope=""; search_combined="on" ;;
-                    *) echo "❌ Enter 1, 2, or 3."; continue ;;
+                    3)
+                        read -r -e -p "Folder to refresh and search: " search_custom_folder
+                        [ -n "$search_custom_folder" ] || { echo "❌ Enter a folder path."; continue; }
+                        if [ ! -d "$search_custom_folder" ] || [ ! -r "$search_custom_folder" ] || [ ! -x "$search_custom_folder" ]; then
+                            echo "❌ That folder is unavailable or cannot be read: $search_custom_folder"
+                            continue
+                        fi
+                        search_scope="$(realpath "$search_custom_folder")"
+                        echo "Refreshing Walker's saved search index below: $search_scope"
+                        if ! python3 "$SCRIPT_DIR/wombat-walker-db.py" scan "$WALKER_DATABASE" "$search_scope" little; then
+                            echo "❌ Could not refresh that folder's search index. Search was cancelled."
+                            continue
+                        fi
+                        ;;
+                    4) search_scope=""; search_combined="on" ;;
+                    *) echo "❌ Enter 1, 2, 3, or 4."; continue ;;
                 esac
                 search_offset=0
                 search_order="relevance"
